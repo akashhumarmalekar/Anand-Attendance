@@ -412,12 +412,14 @@ tr:nth-child(even) td{background:#fafafa;}
 .timeslot-sub{font-size:10px;color:#64748b;margin-top:2px;}
 @media(max-width:600px){.btn{padding:7px 11px;font-size:12px;}.hide-sm{display:none!important;}}
 
-/* Sidebar Layout */
-.app-shell{display:flex;min-height:100vh;align-items:flex-start;}
-.sidebar{width:195px;min-width:195px;background:#16213e;color:#fff;display:flex;flex-direction:column;height:100vh;position:sticky;top:0;flex-shrink:0;z-index:100;box-shadow:2px 0 10px rgba(0,0,0,.2);transition:width .22s ease,min-width .22s ease;}
-.sidebar.collapsed{width:0px;min-width:0px;overflow:hidden;}
-.sidebar-toggle{position:fixed;top:14px;left:10px;z-index:200;background:#16213e;border:none;color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.3);transition:left .22s ease;}
-.sidebar-toggle.shifted{left:205px;}
+/* Sidebar Layout — overlay drawer; main content never resizes when toggled */
+.app-shell{position:relative;min-height:100vh;}
+.sidebar{width:230px;max-width:82vw;background:#16213e;color:#fff;display:flex;flex-direction:column;height:100vh;position:fixed;top:0;left:0;z-index:300;box-shadow:8px 0 32px rgba(0,0,0,.35);transform:translateX(0);transition:transform .28s cubic-bezier(.4,0,.2,1);}
+.sidebar.collapsed{transform:translateX(-100%);box-shadow:none;}
+.sidebar-backdrop{position:fixed;inset:0;background:rgba(8,12,28,.55);-webkit-backdrop-filter:blur(1px);backdrop-filter:blur(1px);z-index:290;animation:sidebarFadeIn .18s ease;}
+@keyframes sidebarFadeIn{from{opacity:0;}to{opacity:1;}}
+.sidebar-toggle{position:fixed;top:14px;left:14px;z-index:310;background:#16213e;border:none;color:#fff;width:36px;height:36px;border-radius:9px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.35);transition:background .15s;}
+.sidebar-toggle:hover{background:#1d2c54;}
 .sidebar-nav{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px 0;}
 .sidebar-nav::-webkit-scrollbar{width:4px;}
 .sidebar-nav::-webkit-scrollbar-track{background:transparent;}
@@ -428,15 +430,14 @@ tr:nth-child(even) td{background:#fafafa;}
 .sidebar-meta{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:5px;}
 .sidebar-meta-label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:1px;}
 .sidebar-meta input,.sidebar-meta select{font-family:inherit;font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;width:100%;}
-.sidebar-nav{flex:1;overflow-y:auto;padding:6px 0;}
 .sidebar-tab{display:flex;align-items:center;gap:9px;width:100%;padding:9px 14px;border:none;border-left:3px solid transparent;background:transparent;cursor:pointer;font-size:12px;font-weight:500;color:#94a3b8;transition:all .13s;text-align:left;border-radius:0;white-space:nowrap;}
 .sidebar-tab.active{color:#fff;border-left-color:#3b82f6;background:rgba(59,130,246,.15);}
 .sidebar-tab:hover:not(.active){color:#cbd5e1;background:rgba(255,255,255,.05);}
 .sidebar-tab-icon{font-size:14px;min-width:18px;text-align:center;}
 .sidebar-actions{padding:10px 10px 14px;border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:5px;}
 .sidebar-actions .btn{justify-content:center;font-size:11px;width:100%;padding:7px 10px;}
-.main-content{flex:1;min-width:0;padding:20px 18px;transition:padding .22s ease;}
-@media(max-width:720px){.sidebar{width:52px;min-width:52px;}.sidebar-brand,.sidebar-sub,.sidebar-meta,.sidebar-tab-label,.sidebar-actions .btn span{display:none;}.sidebar-tab{padding:11px 0;justify-content:center;}.main-content{padding:12px 8px;}}
+.main-content{width:100%;box-sizing:border-box;padding:20px 18px 24px;padding-top:64px;}
+@media(max-width:720px){.sidebar{width:78vw;max-width:300px;}.main-content{padding:12px 12px 16px;padding-top:60px;}}
 
 /* Dark mode overrides applied via inline styles on root div */
 .dark .card{background:#1e293b;border-color:#334155;}
@@ -1108,6 +1109,7 @@ function App() {
   const [fpOverrides, setFPOverrides] = useState(loadFPOverrides);
   const [sessionDate, setSessionDate] = useState(todayStr);
   const [sabhaType, setSabhaType] = useState(() => localStorage.getItem(LS_SABHA) || "Weekly");
+  const [dateConfirmed, setDateConfirmed] = useState(false);
   const [sessionNotes, setSessionNotes] = useState(loadNotes);
   const [sessionNote, setSessionNote] = useState("");
   const [catOverrides, setCatOverrides] = useState(loadCatOv);
@@ -1149,7 +1151,7 @@ function App() {
   const [yoyRange2To, setYoyRange2To] = useState("");
   // Print modal
   const [showPrintModal, setShowPrintModal] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   // Followup-wise WA modal
   const [showFPWAModal, setShowFPWAModal] = useState(false);
   // Prev-session absent panel
@@ -1485,6 +1487,15 @@ function App() {
     setQResults(allMembers.filter(m => m.name.toLowerCase().includes(q)).slice(0, 8));
   }
   function confirmQMark(name) {
+    const already = attendance[name] && attendance[name].status === "P";
+    if (already) {
+      toast_(`⚠️ ${name} is already marked Present`, "error");
+      setQSearch("");
+      setQResults([]);
+      setQHighlight(0);
+      qRef.current && qRef.current.focus();
+      return;
+    }
     mark(name, "P");
     setQSearch("");
     setQResults([]);
@@ -3110,10 +3121,14 @@ function App() {
     }
   },
   /*#__PURE__*/React.createElement("button",{
-    className: "sidebar-toggle" + (sidebarOpen ? " shifted" : ""),
+    className: "sidebar-toggle",
     onClick: function(){ setSidebarOpen(function(v){ return !v; }); },
     title: sidebarOpen ? "Hide sidebar" : "Show sidebar"
-  }, sidebarOpen ? "←" : "☰"),
+  }, sidebarOpen ? "✕" : "☰"),
+  sidebarOpen && /*#__PURE__*/React.createElement("div",{
+    className: "sidebar-backdrop",
+    onClick: function(){ setSidebarOpen(false); }
+  }),
   /*#__PURE__*/React.createElement("div",{className:"sidebar" + (sidebarOpen ? "" : " collapsed")},
     /*#__PURE__*/React.createElement("div",{className:"sidebar-header"},
       /*#__PURE__*/React.createElement("div",{className:"sidebar-brand"},"🙏 Swami Shreeji"),
@@ -3133,7 +3148,7 @@ function App() {
     ),
     /*#__PURE__*/React.createElement("nav",{className:"sidebar-nav"},
       STABS.map(function(item){
-        return /*#__PURE__*/React.createElement("button",{key:item[0],className:"sidebar-tab"+(tab===item[0]?" active":""),onClick:function(){setTab(item[0]);}},
+        return /*#__PURE__*/React.createElement("button",{key:item[0],className:"sidebar-tab"+(tab===item[0]?" active":""),onClick:function(){setTab(item[0]); setSidebarOpen(false);}},
           /*#__PURE__*/React.createElement("span",{className:"sidebar-tab-icon"},item[1]),
           /*#__PURE__*/React.createElement("span",{className:"sidebar-tab-label"},item[2])
         );
@@ -3990,7 +4005,50 @@ function App() {
       fontSize: 12,
       color: "#555"
     }
-  }, /*#__PURE__*/React.createElement("b", null, dashData.fpPerf.filter(f => f.avg < 50).map(f => f.fp).join(", ")), " below 50% avg attendance."))))), tab === "panel" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("b", null, dashData.fpPerf.filter(f => f.avg < 50).map(f => f.fp).join(", ")), " below 50% avg attendance."))))), tab === "panel" && !dateConfirmed && /*#__PURE__*/React.createElement("div", {
+    style: { maxWidth: 420, margin: "30px auto 0" }
+  },
+    /*#__PURE__*/React.createElement("div", { style: { textAlign: "center", marginBottom: 18 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 38, marginBottom: 8 } }, "📅"),
+      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 17, marginBottom: 4 } }, "Set Session Date"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12.5, color: "#888" } }, "Pick the date and sabha type before you start marking attendance.")
+    ),
+    /*#__PURE__*/React.createElement("div", { className: "card", style: { padding: 20 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 5 } }, "Session Date"),
+      /*#__PURE__*/React.createElement("input", {
+        value: sessionDate,
+        onChange: e => setSessionDate(e.target.value),
+        className: "input-s",
+        style: { width: "100%", marginBottom: 16, fontSize: 14, padding: "10px 12px", boxSizing: "border-box" }
+      }),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 5 } }, "Sabha Type"),
+      /*#__PURE__*/React.createElement("select", {
+        value: sabhaType,
+        onChange: e => { setSabhaType(e.target.value); localStorage.setItem(LS_SABHA, e.target.value); },
+        className: "input-s",
+        style: { width: "100%", marginBottom: history.some(s => s.date === sessionDate) ? 10 : 20, fontSize: 14, padding: "10px 12px", boxSizing: "border-box" }
+      }, ["Weekly", "Monthly", "Special", "Yuva Shibir", "Festival"].map(t => /*#__PURE__*/React.createElement("option", { key: t }, t))),
+      history.some(s => s.date === sessionDate) && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 12, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 10px", marginBottom: 16 }
+      }, "⚠️ Attendance for this date was already submitted earlier. You can still review or edit it."),
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn btn-green",
+        style: { width: "100%", justifyContent: "center", padding: "11px", fontSize: 14, fontWeight: 700 },
+        onClick: () => {
+          if (!sessionDate.trim()) { toast_("Please enter a session date", "error"); return; }
+          setDateConfirmed(true);
+        }
+      }, "▶ Start Attendance")
+    )
+  ), tab === "panel" && dateConfirmed && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "8px 12px", marginBottom: 12, fontSize: 12 }
+  },
+    /*#__PURE__*/React.createElement("span", null, "📅 Session: ", /*#__PURE__*/React.createElement("b", null, sessionDate), " · ", sabhaType),
+    /*#__PURE__*/React.createElement("button", {
+      onClick: () => setDateConfirmed(false),
+      style: { background: "transparent", border: "1px solid #1e40af", color: "#1e40af", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }
+    }, "Change date")
+  ), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))",
