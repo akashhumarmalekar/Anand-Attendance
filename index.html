@@ -4,6 +4,92 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>|| Akshar Anand || Attendance</title>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     FIREBASE — Authentication (Google Sign-In) + Firestore (shared data)
+     ═══════════════════════════════════════════════════════════════════════
+     1. Replace the firebaseConfig object below with YOUR project's config
+        (Firebase Console → Project Settings → General → Your apps → SDK setup).
+     2. Anyone with a Google account can sign in for now. To restrict access
+        to specific people later, open ALLOWED_EMAILS below and list their
+        Gmail addresses, AND uncomment the matching check in your Firestore
+        security rules (see the rules block provided separately).
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import {
+    getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // ── 1) PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  // ── 2) Optional allowlist. Leave empty to allow ANY Google account. ────
+  // Example: const ALLOWED_EMAILS = ["akash@gmail.com", "leader2@gmail.com"];
+  const ALLOWED_EMAILS = [];
+
+  // Shared document — every signed-in (allowed) user reads/writes the same data.
+  const SHARED_DOC_PATH = ["shreeji", "shared-data"];
+
+  // Calling getAuth()/getFirestore() with a placeholder apiKey throws
+  // immediately (auth/invalid-api-key) — so check BEFORE touching the SDK,
+  // and tell the React side clearly instead of leaving it stuck on "Loading…".
+  // A plain window flag (not just the event) is set too, because this module
+  // script runs in <head> well before React mounts AuthGate — the event
+  // could fire and be missed if we only relied on an event listener.
+  if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY") {
+    window.__shreejiConfigMissing = true;
+    window.dispatchEvent(new CustomEvent("shreeji-config-missing"));
+  } else {
+    try {
+      const firebaseApp = initializeApp(firebaseConfig);
+      const auth = getAuth(firebaseApp);
+      const db = getFirestore(firebaseApp);
+      const provider = new GoogleAuthProvider();
+
+      const isAllowed = (user) => {
+        if (!user) return false;
+        if (ALLOWED_EMAILS.length === 0) return true;
+        return ALLOWED_EMAILS.map(e => e.toLowerCase()).includes((user.email || "").toLowerCase());
+      };
+
+      // Bridge to the classic (non-module) app script below via window globals.
+      window.ShreejiFirebase = {
+        auth,
+        db,
+        isAllowed,
+        signIn: () => signInWithPopup(auth, provider).catch(err => {
+          console.error("Sign-in failed:", err);
+          window.dispatchEvent(new CustomEvent("shreeji-auth-error", { detail: err.message || String(err) }));
+        }),
+        signOutUser: () => signOut(auth),
+        onAuthChange: (cb) => onAuthStateChanged(auth, cb),
+        getSharedDoc: () => getDoc(doc(db, ...SHARED_DOC_PATH)),
+        setSharedDoc: (data, merge) => setDoc(doc(db, ...SHARED_DOC_PATH), { ...data, _updatedAt: serverTimestamp() }, { merge: !!merge }),
+        listenSharedDoc: (cb) => onSnapshot(doc(db, ...SHARED_DOC_PATH), cb, (err) => {
+          console.error("Firestore listen error:", err);
+          window.dispatchEvent(new CustomEvent("shreeji-firestore-error", { detail: err.message || String(err) }));
+        })
+      };
+      window.dispatchEvent(new CustomEvent("shreeji-firebase-ready"));
+    } catch (err) {
+      console.error("Firebase initialization failed:", err);
+      window.__shreejiConfigMissing = true;
+      window.dispatchEvent(new CustomEvent("shreeji-config-missing", { detail: err.message || String(err) }));
+    }
+  }
+</script>
+
 <script>/* React 18.2.0 */
 /**
  * @license React
@@ -1340,7 +1426,10 @@ const MASTER = [{
   contact: ""
 }];
 
-// ─── Storage helpers ─────────────────────────────────────────────────────────
+// ─── Storage helpers (Firestore-backed, shared across all signed-in users) ───
+// localStorage keys are kept only as the field names inside the single shared
+// Firestore document (window.ShreejiStore.cache), and as a one-time migration
+// source (see migrateLocalStorageToFirestore below).
 const LS_ATT = "shreeji_attendance";
 const LS_HIST = "shreeji_history";
 const LS_MEMBERS = "shreeji_members";
@@ -1350,95 +1439,53 @@ const LS_SABHA = "shreeji_sabha_type"; // current session sabha type
 const LS_NOTES = "shreeji_session_notes"; // {date: note}
 const LS_CAT_OV = "shreeji_cat_overrides"; // {name: "R"|"I"|"N"} manual overrides
 
-function loadAtt() {
-  try {
-    const r = localStorage.getItem(LS_ATT);
-    if (r) return JSON.parse(r);
-  } catch (e) {}
-  return Object.fromEntries(MASTER.map(m => [m.name, {
-    status: "A",
-    time: ""
-  }]));
-}
-function saveAtt(a) {
-  try {
-    localStorage.setItem(LS_ATT, JSON.stringify(a));
-  } catch (e) {}
-}
-function loadHist() {
-  try {
-    const r = localStorage.getItem(LS_HIST);
-    if (r) return JSON.parse(r);
-  } catch (e) {}
-  return [];
-}
-function saveHist(h) {
-  try {
-    localStorage.setItem(LS_HIST, JSON.stringify(h));
-  } catch (e) {}
-}
-function loadMembers() {
-  try {
-    const r = localStorage.getItem(LS_MEMBERS);
-    if (r) return JSON.parse(r);
-  } catch (e) {}
-  return [];
-}
-function saveMembers(m) {
-  try {
-    localStorage.setItem(LS_MEMBERS, JSON.stringify(m));
-  } catch (e) {}
-}
-function loadFPOverrides() {
-  try {
-    const r = localStorage.getItem(LS_FP);
-    if (r) return JSON.parse(r);
-  } catch (e) {}
-  return {};
-}
-function saveFPOverrides(o) {
-  try {
-    localStorage.setItem(LS_FP, JSON.stringify(o));
-  } catch (e) {}
-}
-function loadPin() {
-  try {
-    return localStorage.getItem(LS_PIN) || "";
-  } catch (e) {
-    return "";
+// In-memory mirror of the shared Firestore document. Hydrated by the
+// real-time onSnapshot listener set up in AuthGate (see bottom of file).
+// All load*() functions read synchronously from this cache so existing
+// React state initializers (useState(loadX)) keep working unchanged.
+window.ShreejiStore = window.ShreejiStore || {
+  cache: {},          // mirrors the shared Firestore doc fields
+  ready: false,        // true once the first snapshot has arrived
+  listeners: new Set() // React setState callbacks subscribed to remote changes
+};
+
+// Pushes a single field to the shared Firestore doc. Fire-and-forget by
+// design — callers already update local React state + cache synchronously,
+// so the UI never waits on network latency.
+function fsSet(field, value) {
+  window.ShreejiStore.cache[field] = value;
+  if (window.ShreejiFirebase) {
+    window.ShreejiFirebase.setSharedDoc({ [field]: value }, true).catch(e => {
+      console.error("Firestore write failed for", field, e);
+    });
   }
 }
-function savePin(p) {
-  try {
-    localStorage.setItem(LS_PIN, p);
-  } catch (e) {}
+function fsGet(field, fallback) {
+  const c = window.ShreejiStore.cache;
+  return (c && Object.prototype.hasOwnProperty.call(c, field)) ? c[field] : fallback;
 }
-function loadViewerPin() { try { return localStorage.getItem(LS_VIEWER_PIN) || ""; } catch(e) { return ""; } }
-function saveViewerPin(p) { try { localStorage.setItem(LS_VIEWER_PIN, p); } catch(e) {} }
-function loadNotes() {
-  try {
-    const r = localStorage.getItem(LS_NOTES);
-    if (r) return JSON.parse(r);
-  } catch (e) {}
-  return {};
+
+function loadAtt() {
+  return fsGet(LS_ATT, Object.fromEntries(MASTER.map(m => [m.name, {
+    status: "A",
+    time: ""
+  }])));
 }
-function saveNotes(n) {
-  try {
-    localStorage.setItem(LS_NOTES, JSON.stringify(n));
-  } catch (e) {}
-}
-function loadCatOv() {
-  try {
-    const r = localStorage.getItem(LS_CAT_OV);
-    if (r) return JSON.parse(r);
-  } catch (e) {}
-  return {};
-}
-function saveCatOv(o) {
-  try {
-    localStorage.setItem(LS_CAT_OV, JSON.stringify(o));
-  } catch (e) {}
-}
+function saveAtt(a) { fsSet(LS_ATT, a); }
+function loadHist() { return fsGet(LS_HIST, []); }
+function saveHist(h) { fsSet(LS_HIST, h); }
+function loadMembers() { return fsGet(LS_MEMBERS, []); }
+function saveMembers(m) { fsSet(LS_MEMBERS, m); }
+function loadFPOverrides() { return fsGet(LS_FP, {}); }
+function saveFPOverrides(o) { fsSet(LS_FP, o); }
+function loadPin() { return fsGet(LS_PIN, ""); }
+function savePin(p) { fsSet(LS_PIN, p); }
+function loadViewerPin() { return fsGet(LS_VIEWER_PIN, ""); }
+function saveViewerPin(p) { fsSet(LS_VIEWER_PIN, p); }
+function loadNotes() { return fsGet(LS_NOTES, {}); }
+function saveNotes(n) { fsSet(LS_NOTES, n); }
+function loadCatOv() { return fsGet(LS_CAT_OV, {}); }
+function saveCatOv(o) { fsSet(LS_CAT_OV, o); }
 
 // ─── Category logic ───────────────────────────────────────────────────────────
 // Returns "R" | "I" | "N" based on last N sessions in history
@@ -1471,7 +1518,7 @@ function App() {
   const [extraMembers, setExtraMembers] = useState(loadMembers);
   const [fpOverrides, setFPOverrides] = useState(loadFPOverrides);
   const [sessionDate, setSessionDate] = useState(todayStr);
-  const [sabhaType, setSabhaType] = useState(() => localStorage.getItem(LS_SABHA) || "Weekly");
+  const [sabhaType, setSabhaType] = useState(() => fsGet(LS_SABHA, "Weekly"));
   const [dateConfirmed, setDateConfirmed] = useState(false);
   const [sessionNotes, setSessionNotes] = useState(loadNotes);
   const [sessionNote, setSessionNote] = useState("");
@@ -1519,10 +1566,10 @@ function App() {
   const [showFPWAModal, setShowFPWAModal] = useState(false);
   // Prev-session absent panel
   const [showPrevAbsent, setShowPrevAbsent] = useState(true);
-  const [absenceReasons, setAbsenceReasons] = useState(() => { try { return JSON.parse(localStorage.getItem("shreeji_abs_reasons")||"{}"); } catch(e){ return {}; } });
-  function saveAbsenceReasons(r){ try { localStorage.setItem("shreeji_abs_reasons", JSON.stringify(r)); } catch(e){} }
+  const [absenceReasons, setAbsenceReasons] = useState(() => fsGet("shreeji_abs_reasons", {}));
+  function saveAbsenceReasons(r){ fsSet("shreeji_abs_reasons", r); }
   function setAbsenceReason(name, reason){ const upd={...absenceReasons,[name]:reason}; setAbsenceReasons(upd); saveAbsenceReasons(upd); }
-  const [sessionStartTime, setSessionStartTime] = useState(() => localStorage.getItem("shreeji_start_time")||"20:00");
+  const [sessionStartTime, setSessionStartTime] = useState(() => fsGet("shreeji_start_time", "20:00"));
   const [showGroupedWAModal, setShowGroupedWAModal] = useState(false);
   // Swipe nav
   const swipeRef = useRef(null);
@@ -1560,9 +1607,9 @@ function App() {
   // ── Reference overrides (for MASTER members that don't have reference in their object)
   const LS_REFOV = "shreeji_ref_overrides";
   const [referenceOverrides, setReferenceOverrides] = useState(function() {
-    try { return JSON.parse(localStorage.getItem(LS_REFOV) || "{}"); } catch(e) { return {}; }
+    return fsGet(LS_REFOV, {});
   });
-  function saveRefOverrides(obj) { try { localStorage.setItem(LS_REFOV, JSON.stringify(obj)); } catch(e) {} }
+  function saveRefOverrides(obj) { fsSet(LS_REFOV, obj); }
   // ── Excel import state
   const [excelImportStatus, setExcelImportStatus] = useState(null);
   const excelImportRef = useRef(null);
@@ -1570,12 +1617,12 @@ function App() {
   // When true, MASTER hardcoded members are hidden (used after "Delete All Data")
   const LS_SUPPRESS_MASTER = "shreeji_suppress_master";
   const [suppressMaster, setSuppressMaster] = useState(function() {
-    try { return localStorage.getItem("shreeji_suppress_master") === "1"; } catch(e) { return false; }
+    return fsGet(LS_SUPPRESS_MASTER, false);
   });
 
   // On mount: if an old broken import left stale extraMembers alongside suppressMaster=false,
   // there's nothing we can do retroactively — but if suppressMaster IS true we trust the
-  // extraMembers in localStorage as the sole source of truth (MASTER is hidden).
+  // extraMembers in the shared Firestore document as the sole source of truth (MASTER is hidden).
   // No cleanup needed here — the allMembers useMemo handles it correctly.
   const allMembers = useMemo(() => {
     const base = suppressMaster ? [] : MASTER.map(m => ({
@@ -2045,15 +2092,12 @@ function App() {
       return;
     }
     // We create it by assigning a dummy override that we'll just track as existing
-    // Actually we track new groups via a separate LS key for group names
+    // Actually we track new groups via a separate Firestore field for group names
     const key = "shreeji_extra_groups";
-    let eg = [];
-    try {
-      eg = JSON.parse(localStorage.getItem(key) || "[]");
-    } catch (e) {}
+    let eg = fsGet(key, []).slice();
     if (!eg.includes(fpNewName.trim())) {
       eg.push(fpNewName.trim());
-      localStorage.setItem(key, JSON.stringify(eg));
+      fsSet(key, eg);
     }
     toast_(`Group "${fpNewName.trim()}" created. Now assign members to it.`);
     setFPNewName("");
@@ -3330,16 +3374,23 @@ function App() {
   }
 
   // ── Delete ALL data (wipe everything, ready for fresh Excel import) ────
+  // This clears the SHARED Firestore document — every signed-in user will
+  // see the wipe in real time, since they're all looking at the same data.
   function doDeleteAll() {
-    // Clear every known localStorage key
-    [
-      LS_ATT, LS_HIST, LS_MEMBERS, LS_FP, LS_NOTES, LS_CAT_OV,
-      "shreeji_abs_reasons", "shreeji_extra_groups",
-      "shreeji_ref_overrides", "shreeji_start_time", "shreeji_dark", LS_SABHA
-    ].forEach(function(k) { try { localStorage.removeItem(k); } catch(e) {} });
+    fsSet(LS_ATT, {});
+    fsSet(LS_HIST, []);
+    fsSet(LS_MEMBERS, []);
+    fsSet(LS_FP, {});
+    fsSet(LS_NOTES, {});
+    fsSet(LS_CAT_OV, {});
+    fsSet("shreeji_abs_reasons", {});
+    fsSet("shreeji_extra_groups", []);
+    fsSet("shreeji_ref_overrides", {});
+    fsSet("shreeji_start_time", "20:00");
+    fsSet(LS_SABHA, "Weekly");
 
     // Suppress Master DB so hardcoded members also disappear
-    try { localStorage.setItem("shreeji_suppress_master", "1"); } catch(e) {}
+    fsSet("shreeji_suppress_master", true);
     setSuppressMaster(true);
 
     // Reset all React state to empty / defaults
@@ -3435,13 +3486,15 @@ function App() {
 
         // ── Wipe everything and replace ──────────────────────────────
         // 1. Suppress hardcoded MASTER array
-        try { localStorage.setItem("shreeji_suppress_master", "1"); } catch(e2) {}
+        fsSet("shreeji_suppress_master", true);
         setSuppressMaster(true);
 
         // 2. Clear ALL existing data (members, attendance, overrides)
-        [LS_MEMBERS, LS_FP, LS_CAT_OV, LS_ATT, "shreeji_ref_overrides"].forEach(function(k) {
-          try { localStorage.removeItem(k); } catch(e2) {}
-        });
+        fsSet(LS_MEMBERS, []);
+        fsSet(LS_FP, {});
+        fsSet(LS_CAT_OV, {});
+        fsSet(LS_ATT, {});
+        fsSet("shreeji_ref_overrides", {});
 
         // 3. Wipe React state fully first, then apply new data
         setAttendance({});
@@ -3537,7 +3590,7 @@ function App() {
       }),
       /*#__PURE__*/React.createElement("select",{
         value:sabhaType,
-        onChange:function(e){setSabhaType(e.target.value);localStorage.setItem(LS_SABHA,e.target.value);},
+        onChange:function(e){setSabhaType(e.target.value);fsSet(LS_SABHA,e.target.value);},
         "aria-label":"Sabha Type"
       },
         ["Weekly","Monthly","Special","Yuva Shibir","Festival"].map(function(t){
@@ -3560,7 +3613,17 @@ function App() {
         className:"navbar-btn",
         onClick:function(){setPinUnlocked(false);setPinInput("");},
         title:isViewer?"Lock (Viewer)":"Lock (Admin)","aria-label":"Lock"
-      },"🔒")
+      },"🔒"),
+      window.ShreejiCurrentUser&&/*#__PURE__*/React.createElement("button",{
+        className:"navbar-btn",
+        onClick:function(){
+          if(window.confirm("Sign out of "+(window.ShreejiCurrentUser.email||"Google")+"?")){
+            window.ShreejiFirebase&&window.ShreejiFirebase.signOutUser();
+          }
+        },
+        title:"Signed in as "+(window.ShreejiCurrentUser.email||"")+" — click to sign out",
+        "aria-label":"Sign out"
+      },"👤 ⎋")
     )
   ),
 
@@ -4445,7 +4508,7 @@ function App() {
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 5 } }, "Sabha Type"),
       /*#__PURE__*/React.createElement("select", {
         value: sabhaType,
-        onChange: e => { setSabhaType(e.target.value); localStorage.setItem(LS_SABHA, e.target.value); },
+        onChange: e => { setSabhaType(e.target.value); fsSet(LS_SABHA, e.target.value); },
         className: "input-s",
         style: { width: "100%", marginBottom: history.some(s => s.date === sessionDate) ? 10 : 20, fontSize: 14, padding: "10px 12px", boxSizing: "border-box" }
       }, ["Weekly", "Monthly", "Special", "Yuva Shibir", "Festival"].map(t => /*#__PURE__*/React.createElement("option", { key: t }, t))),
@@ -8420,7 +8483,7 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
     value: sabhaType,
     onChange: e => {
       setSabhaType(e.target.value);
-      localStorage.setItem(LS_SABHA, e.target.value);
+      fsSet(LS_SABHA, e.target.value);
     },
     style: {
       marginLeft: 8,
@@ -8438,7 +8501,7 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement("input", {
       type: "time",
       value: sessionStartTime,
-      onChange: function(e){ setSessionStartTime(e.target.value); localStorage.setItem("shreeji_start_time",e.target.value); },
+      onChange: function(e){ setSessionStartTime(e.target.value); fsSet("shreeji_start_time",e.target.value); },
       style: {padding:"4px 10px",borderRadius:7,border:"1px solid #ddd",fontSize:13}
     }),
     /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:"#aaa"}}, "Arrivals after this time show \u23f0 Late badge")
@@ -9021,7 +9084,305 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
   })()
   ));
 }
-ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));
+
+// ═══════════════════════════════════════════════════════════════════════
+// AUTH GATE — Google Sign-In + Firestore real-time sync wrapper
+// ═══════════════════════════════════════════════════════════════════════
+// Renders a sign-in screen until the user is authenticated (and, if an
+// ALLOWED_EMAILS list is configured in the Firebase <script type="module">
+// block at the top of this file, until their email is on that list).
+// Once signed in, it opens a live Firestore listener on the single shared
+// document, hydrates window.ShreejiStore.cache, and only then mounts <App/>
+// — this guarantees every useState(loadX) initializer inside App() reads
+// real synced data instead of empty defaults.
+function AuthGate() {
+  const [fbReady, setFbReady] = useState(!!window.ShreejiFirebase);
+  const [configMissing, setConfigMissing] = useState(!!window.__shreejiConfigMissing);
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [storeReady, setStoreReady] = useState(false);
+  const [firestoreError, setFirestoreError] = useState("");
+  const [mountKey, setMountKey] = useState(0);
+  const [docExists, setDocExists] = useState(true);
+  const [migrating, setMigrating] = useState(false);
+  const [hasRemoteUpdate, setHasRemoteUpdate] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
+
+  // Wait for the Firebase module script (top of <head>) to finish loading.
+  useEffect(function () {
+    if (fbReady) return;
+    function onReady() { setFbReady(true); }
+    function onConfigMissing() { setConfigMissing(true); }
+    window.addEventListener("shreeji-firebase-ready", onReady);
+    window.addEventListener("shreeji-config-missing", onConfigMissing);
+    return function () {
+      window.removeEventListener("shreeji-firebase-ready", onReady);
+      window.removeEventListener("shreeji-config-missing", onConfigMissing);
+    };
+  }, [fbReady]);
+
+  // Listen for auth-related error events dispatched by the module script.
+  useEffect(function () {
+    function onAuthErr(e) { setAuthError(e.detail || "Sign-in failed. Please try again."); }
+    function onFsErr(e) { setFirestoreError(e.detail || "Could not connect to the shared database."); }
+    window.addEventListener("shreeji-auth-error", onAuthErr);
+    window.addEventListener("shreeji-firestore-error", onFsErr);
+    return function () {
+      window.removeEventListener("shreeji-auth-error", onAuthErr);
+      window.removeEventListener("shreeji-firestore-error", onFsErr);
+    };
+  }, []);
+
+  // Track Google auth state.
+  useEffect(function () {
+    if (!fbReady) return;
+    const unsub = window.ShreejiFirebase.onAuthChange(function (u) {
+      setUser(u);
+      setAuthChecked(true);
+      window.ShreejiCurrentUser = u ? { email: u.email, name: u.displayName } : null;
+    });
+    return unsub;
+  }, [fbReady]);
+
+  // Once signed in AND allowed, open the real-time Firestore listener.
+  useEffect(function () {
+    if (!fbReady || !user) return;
+    if (!window.ShreejiFirebase.isAllowed(user)) return;
+    setStoreReady(false);
+    hasLoadedOnceRef.current = false;
+    const unsub = window.ShreejiFirebase.listenSharedDoc(function (snap) {
+      if (snap.exists()) {
+        window.ShreejiStore.cache = snap.data() || {};
+        setDocExists(true);
+      } else {
+        window.ShreejiStore.cache = {};
+        setDocExists(false);
+      }
+      window.ShreejiStore.ready = true;
+      if (!hasLoadedOnceRef.current) {
+        hasLoadedOnceRef.current = true;
+        setStoreReady(true);
+      } else {
+        // Remote change after initial load (e.g. another followup leader
+        // marked attendance elsewhere). The cache above is already fresh —
+        // we deliberately do NOT auto-remount App here, since that would
+        // wipe any in-progress, not-yet-saved typing (like the session note
+        // textarea). Instead, flag it so the navbar can offer a manual
+        // refresh the person can tap when they're ready.
+        window.ShreejiStore.hasRemoteUpdate = true;
+        setHasRemoteUpdate(true);
+      }
+    });
+    return unsub;
+  }, [fbReady, user]);
+
+  function migrateLocalStorageToFirestore() {
+    setMigrating(true);
+    const legacyKeys = {
+      shreeji_attendance: "shreeji_attendance",
+      shreeji_history: "shreeji_history",
+      shreeji_members: "shreeji_members",
+      shreeji_followup_overrides: "shreeji_followup_overrides",
+      shreeji_pin: "shreeji_pin",
+      shreeji_viewer_pin: "shreeji_viewer_pin",
+      shreeji_sabha_type: "shreeji_sabha_type",
+      shreeji_session_notes: "shreeji_session_notes",
+      shreeji_cat_overrides: "shreeji_cat_overrides",
+      shreeji_ref_overrides: "shreeji_ref_overrides",
+      shreeji_abs_reasons: "shreeji_abs_reasons",
+      shreeji_start_time: "shreeji_start_time",
+      shreeji_suppress_master: "shreeji_suppress_master",
+      shreeji_extra_groups: "shreeji_extra_groups"
+    };
+    const payload = {};
+    Object.keys(legacyKeys).forEach(function (field) {
+      try {
+        const raw = localStorage.getItem(legacyKeys[field]);
+        if (raw === null) return;
+        if (field === "shreeji_pin" || field === "shreeji_viewer_pin" ||
+            field === "shreeji_sabha_type" || field === "shreeji_start_time") {
+          payload[field] = raw; // plain strings
+        } else if (field === "shreeji_suppress_master") {
+          payload[field] = raw === "1";
+        } else {
+          payload[field] = JSON.parse(raw);
+        }
+      } catch (e) { /* skip unparsable legacy value */ }
+    });
+    window.ShreejiFirebase.setSharedDoc(payload, true)
+      .then(function () {
+        window.ShreejiStore.cache = Object.assign({}, window.ShreejiStore.cache, payload);
+        setDocExists(true);
+        setMigrating(false);
+        setMountKey(function (k) { return k + 1; });
+      })
+      .catch(function (e) {
+        setFirestoreError("Migration failed: " + (e.message || e));
+        setMigrating(false);
+      });
+  }
+
+  function startFresh() {
+    window.ShreejiFirebase.setSharedDoc({ shreeji_started_at: new Date().toISOString() }, true)
+      .then(function () { setDocExists(true); })
+      .catch(function (e) { setFirestoreError("Could not initialize shared data: " + (e.message || e)); });
+  }
+
+  const screenStyle = {
+    position: "fixed", inset: 0, background: "#0f172a", display: "flex",
+    alignItems: "center", justifyContent: "center", zIndex: 99999, padding: 20
+  };
+  const cardStyle = {
+    background: "#ffffff", borderRadius: 20, padding: "36px 30px", maxWidth: 380,
+    width: "100%", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,.35)"
+  };
+
+  // ── Firebase config not yet pasted in ───────────────────────────────
+  if (configMissing) {
+    return /*#__PURE__*/React.createElement("div", { style: screenStyle },
+      /*#__PURE__*/React.createElement("div", { style: cardStyle },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 40, marginBottom: 10 } }, "🔧"),
+        /*#__PURE__*/React.createElement("h2", { style: { margin: "0 0 10px", color: "#0f172a" } }, "Firebase config needed"),
+        /*#__PURE__*/React.createElement("p", { style: { color: "#475569", fontSize: 13.5, lineHeight: 1.6 } },
+          "Open this HTML file and paste your real Firebase project config into the ",
+          /*#__PURE__*/React.createElement("code", null, "firebaseConfig"),
+          " object near the top of the file, then reload.")
+      )
+    );
+  }
+
+  if (!fbReady || !authChecked) {
+    return /*#__PURE__*/React.createElement("div", { style: screenStyle },
+      /*#__PURE__*/React.createElement("div", { style: Object.assign({}, cardStyle, { color: "#475569" }) }, "Loading…")
+    );
+  }
+
+  // ── Not signed in ────────────────────────────────────────────────────
+  if (!user) {
+    return /*#__PURE__*/React.createElement("div", { style: screenStyle },
+      /*#__PURE__*/React.createElement("div", { style: cardStyle },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 40, marginBottom: 10 } }, "🙏"),
+        /*#__PURE__*/React.createElement("h2", { style: { margin: "0 0 6px", color: "#0f172a" } }, "Akshar Anand Attendance"),
+        /*#__PURE__*/React.createElement("p", { style: { color: "#64748b", fontSize: 13.5, marginBottom: 22 } },
+          "Sign in with Google to access the shared attendance data."),
+        authError && /*#__PURE__*/React.createElement("div", {
+          style: { background: "#fee2e2", color: "#991b1b", borderRadius: 10, padding: "8px 12px", fontSize: 12.5, marginBottom: 14 }
+        }, authError),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: function () { setAuthError(""); window.ShreejiFirebase.signIn(); },
+          style: {
+            display: "inline-flex", alignItems: "center", gap: 10, justifyContent: "center",
+            width: "100%", padding: "12px 16px", borderRadius: 12, border: "1.5px solid #e2e8f0",
+            background: "#fff", fontSize: 14.5, fontWeight: 600, color: "#1a1a1a", cursor: "pointer"
+          }
+        },
+          /*#__PURE__*/React.createElement("svg", { width: 20, height: 20, viewBox: "0 0 48 48" },
+            /*#__PURE__*/React.createElement("path", { fill: "#FFC107", d: "M43.6 20.5H42V20H24v8h11.3C33.7 32.1 29.3 35 24 35c-6.1 0-11.3-3.9-13.1-9.4l-7 5.4C7.4 38.6 15 44 24 44c10.6 0 19.6-7.4 19.6-19.5 0-1.3-.1-2.7-.4-4z" }),
+            /*#__PURE__*/React.createElement("path", { fill: "#FF3D00", d: "M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.9 1.1 8.1 3l6-6C34.5 6.5 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" }),
+            /*#__PURE__*/React.createElement("path", { fill: "#4CAF50", d: "M24 44c5.2 0 9.9-1.9 13.5-5.1l-6.2-5.2C29.3 35.4 26.8 36 24 36c-5.3 0-9.7-2.9-11.3-7.4l-6.6 5.1C9.5 39.6 16.2 44 24 44z" }),
+            /*#__PURE__*/React.createElement("path", { fill: "#1976D2", d: "M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.6l6.2 5.2C40.9 36 44 30.8 44 24.5c0-1.3-.1-2.7-.4-4z" })
+          ),
+          "Sign in with Google"
+        )
+      )
+    );
+  }
+
+  // ── Signed in but not on the allowlist ──────────────────────────────
+  if (!window.ShreejiFirebase.isAllowed(user)) {
+    return /*#__PURE__*/React.createElement("div", { style: screenStyle },
+      /*#__PURE__*/React.createElement("div", { style: cardStyle },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 40, marginBottom: 10 } }, "🚫"),
+        /*#__PURE__*/React.createElement("h2", { style: { margin: "0 0 6px", color: "#0f172a" } }, "Access restricted"),
+        /*#__PURE__*/React.createElement("p", { style: { color: "#64748b", fontSize: 13.5, marginBottom: 18 } },
+          user.email + " isn't on the allowed list for this app. Ask the admin to add your email."),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: function () { window.ShreejiFirebase.signOutUser(); },
+          style: { padding: "10px 18px", borderRadius: 10, border: "1.5px solid #e2e8f0", background: "#fff", cursor: "pointer", fontWeight: 600 }
+        }, "Sign out")
+      )
+    );
+  }
+
+  // ── Signed in + allowed, but the shared document hasn't loaded yet ──
+  if (!storeReady) {
+    return /*#__PURE__*/React.createElement("div", { style: screenStyle },
+      /*#__PURE__*/React.createElement("div", { style: Object.assign({}, cardStyle, { color: "#475569" }) },
+        firestoreError ?
+          /*#__PURE__*/React.createElement("div", { style: { color: "#991b1b", fontSize: 13.5 } }, firestoreError) :
+          "Connecting to shared data…"
+      )
+    );
+  }
+
+  // ── Signed in, allowed, doc loaded — but the shared doc is brand new ─
+  if (!docExists) {
+    const hasLegacyData = (function () {
+      try { return !!localStorage.getItem("shreeji_attendance") || !!localStorage.getItem("shreeji_history"); }
+      catch (e) { return false; }
+    })();
+    return /*#__PURE__*/React.createElement("div", { style: screenStyle },
+      /*#__PURE__*/React.createElement("div", { style: cardStyle },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 40, marginBottom: 10 } }, "📦"),
+        /*#__PURE__*/React.createElement("h2", { style: { margin: "0 0 6px", color: "#0f172a" } }, "No shared data yet"),
+        /*#__PURE__*/React.createElement("p", { style: { color: "#64748b", fontSize: 13.5, marginBottom: 18 } },
+          hasLegacyData
+            ? "This browser has existing attendance data saved locally. Move it into the shared database so every signed-in user can see it?"
+            : "This is a brand-new shared database. Start fresh, or import your member list from the Excel tab once inside."),
+        hasLegacyData && /*#__PURE__*/React.createElement("button", {
+          onClick: migrateLocalStorageToFirestore,
+          disabled: migrating,
+          style: {
+            width: "100%", padding: "12px 16px", borderRadius: 12, border: "none",
+            background: "#2563eb", color: "#fff", fontSize: 14, fontWeight: 700,
+            cursor: migrating ? "default" : "pointer", marginBottom: 10, opacity: migrating ? .7 : 1
+          }
+        }, migrating ? "Migrating…" : "Migrate my local data to Firestore"),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: startFresh,
+          style: {
+            width: "100%", padding: "12px 16px", borderRadius: 12,
+            border: "1.5px solid #e2e8f0", background: "#fff", color: "#1a1a1a",
+            fontSize: 14, fontWeight: 600, cursor: "pointer"
+          }
+        }, "Start fresh (empty)")
+      )
+    );
+  }
+
+  // ── Everything ready — mount the real app ───────────────────────────
+  function refreshFromRemote() {
+    setHasRemoteUpdate(false);
+    window.ShreejiStore.hasRemoteUpdate = false;
+    setMountKey(function (k) { return k + 1; });
+  }
+  window.ShreejiRefreshFromRemote = refreshFromRemote;
+
+  return /*#__PURE__*/React.createElement(React.Fragment, null,
+    hasRemoteUpdate && /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 9998,
+        background: "#2563eb", color: "#fff", textAlign: "center",
+        padding: "9px 14px", fontSize: 13, fontWeight: 600,
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 10
+      }
+    },
+      "Someone else updated the shared data.",
+      /*#__PURE__*/React.createElement("button", {
+        onClick: refreshFromRemote,
+        style: {
+          background: "#fff", color: "#2563eb", border: "none", borderRadius: 7,
+          padding: "4px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer"
+        }
+      }, "Refresh now")
+    ),
+    /*#__PURE__*/React.createElement(App, { key: mountKey })
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(AuthGate, null));
+
 
 </script>
 </body>
