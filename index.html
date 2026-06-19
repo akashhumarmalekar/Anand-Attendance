@@ -545,31 +545,21 @@ button:active{transform:scale(.97);}
   overflow-x:auto;
   overflow-y:hidden;
   scroll-behavior:smooth;
-  /* hide scrollbar but keep it functional */
   scrollbar-width:none;
   -ms-overflow-style:none;
-  /* subtle fade on right edge to hint scrollability */
   -webkit-overflow-scrolling:touch;
-}
-.tab-strip::after{
-  content:'';
-  position:absolute;
-  right:0;top:0;bottom:0;
-  width:28px;
-  background:linear-gradient(to left,var(--bg-card) 0%,transparent 100%);
-  pointer-events:none;
-  z-index:1;
+  /* ensure first tab never hides behind left edge */
+  scroll-padding-left:0;
 }
 .tab-strip::-webkit-scrollbar{display:none;}
 .dark .tab-strip{background:#1e293b;border-color:#334155;}
-.dark .tab-strip::after{background:linear-gradient(to left,#1e293b 0%,transparent 100%);}
 
 /* Individual tab pill */
 .tab-pill{
   display:inline-flex;
   align-items:center;
   gap:5px;
-  padding:0 14px;
+  padding:0 13px;
   height:100%;
   border:none;
   background:transparent;
@@ -579,29 +569,25 @@ button:active{transform:scale(.97);}
   font-weight:500;
   color:var(--text-muted);
   position:relative;
-  transition:color .15s;
+  transition:color .15s,background .15s;
   flex-shrink:0;
   user-select:none;
   -webkit-user-select:none;
-}
-/* active indicator — animated bottom bar */
-.tab-pill::after{
-  content:'';
-  position:absolute;
-  bottom:0;left:12px;right:12px;
-  height:2.5px;
-  background:var(--primary);
-  border-radius:2px 2px 0 0;
-  transform:scaleX(0);
-  transition:transform .2s cubic-bezier(.4,0,.2,1);
+  border-bottom:2.5px solid transparent;
 }
 .tab-pill.active{
   color:var(--primary);
   font-weight:700;
+  border-bottom-color:var(--primary);
+  background:var(--primary-light);
 }
-.tab-pill.active::after{transform:scaleX(1);}
-.tab-pill:hover:not(.active){color:var(--text-secondary);}
-
+.dark .tab-pill.active{
+  background:rgba(37,99,235,.12);
+}
+.tab-pill:hover:not(.active){
+  color:var(--text-secondary);
+  background:var(--bg-muted);
+}
 .tab-pill-icon{
   font-size:14px;
   line-height:1;
@@ -611,17 +597,9 @@ button:active{transform:scale(.97);}
   font-size:12.5px;
   line-height:1;
 }
-
-/* First and last tab get a little extra left/right padding so active pill
-   indicator doesn't look clipped at the edges */
-.tab-pill:first-child{padding-left:16px;}
-.tab-pill:last-child{padding-right:24px;}  /* extra to clear the fade overlay */
-
-/* On wide screens, spread tabs evenly if they all fit */
-@media(min-width:1100px){
-  .tab-strip{justify-content:center;}
-  .tab-strip::after{display:none;}
-}
+/* tiny left padding on very first pill so it doesn't butt against the edge */
+.tab-pill:first-child{margin-left:4px;}
+.tab-pill:last-child{margin-right:4px;}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN CONTENT
@@ -3516,8 +3494,19 @@ function App() {
   React.useEffect(function(){
     var strip = document.querySelector('.tab-strip');
     var active = strip && strip.querySelector('.tab-pill.active');
-    if(active){
-      active.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+    if(active && strip){
+      // Use scrollIntoView with inline:'nearest' so first tab doesn't over-scroll
+      var tabLeft = active.offsetLeft;
+      var tabRight = tabLeft + active.offsetWidth;
+      var stripLeft = strip.scrollLeft;
+      var stripRight = stripLeft + strip.offsetWidth;
+      if(tabLeft < stripLeft){
+        // Tab is hidden to the left — scroll it into view from left edge
+        strip.scrollTo({left: tabLeft - 4, behavior:'smooth'});
+      } else if(tabRight > stripRight){
+        // Tab is hidden to the right — scroll it into view
+        strip.scrollTo({left: tabRight - strip.offsetWidth + 4, behavior:'smooth'});
+      }
     }
   },[tab]);
 
