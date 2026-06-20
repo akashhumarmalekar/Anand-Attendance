@@ -38,6 +38,11 @@
   // Example: const ALLOWED_EMAILS = ["akash@gmail.com", "leader2@gmail.com"];
   const ALLOWED_EMAILS = [];
 
+  // ── 3) Admins can mark/edit attendance and all other data. Everyone else
+  //      who signs in gets view-only access. Add more Gmail addresses here
+  //      as you bring on other followup leaders who should have edit rights.
+  const ADMIN_EMAILS = ["akashhumarmalekar@gmail.com"];
+
   // Shared document — every signed-in (allowed) user reads/writes the same data.
   const SHARED_DOC_PATH = ["shreeji", "shared-data"];
 
@@ -62,12 +67,17 @@
         if (ALLOWED_EMAILS.length === 0) return true;
         return ALLOWED_EMAILS.map(e => e.toLowerCase()).includes((user.email || "").toLowerCase());
       };
+      const isAdmin = (user) => {
+        if (!user) return false;
+        return ADMIN_EMAILS.map(e => e.toLowerCase()).includes((user.email || "").toLowerCase());
+      };
 
       // Bridge to the classic (non-module) app script below via window globals.
       window.ShreejiFirebase = {
         auth,
         db,
         isAllowed,
+        isAdmin,
         signIn: () => signInWithPopup(auth, provider).catch(err => {
           console.error("Sign-in failed:", err);
           window.dispatchEvent(new CustomEvent("shreeji-auth-error", { detail: err.message || String(err) }));
@@ -1602,7 +1612,7 @@ function App() {
   const [showPrevAbsent, setShowPrevAbsent] = useState(true);
   const [absenceReasons, setAbsenceReasons] = useState(() => fsGet("shreeji_abs_reasons", {}));
   function saveAbsenceReasons(r){ fsSet("shreeji_abs_reasons", r); }
-  function setAbsenceReason(name, reason){ const upd={...absenceReasons,[name]:reason}; setAbsenceReasons(upd); saveAbsenceReasons(upd); }
+  function setAbsenceReason(name, reason){ if (!requireAdmin()) return; const upd={...absenceReasons,[name]:reason}; setAbsenceReasons(upd); saveAbsenceReasons(upd); }
   const [sessionStartTime, setSessionStartTime] = useState(() => fsGet("shreeji_start_time", "20:00"));
   const [showGroupedWAModal, setShowGroupedWAModal] = useState(false);
   // Swipe nav
@@ -1653,6 +1663,25 @@ function App() {
   const [suppressMaster, setSuppressMaster] = useState(function() {
     return fsGet(LS_SUPPRESS_MASTER, false);
   });
+
+  // ── Admin access (Google-account based) ──────────────────────────────
+  // This is the AUTHORITATIVE permission check for the whole app: only
+  // the Gmail addresses listed in ADMIN_EMAILS (top of the <head> Firebase
+  // script) can mark/edit/delete anything. Everyone else who successfully
+  // signs in gets read-only access. This is enforced again at the Firestore
+  // security-rules level, so a non-admin can't bypass it by editing the
+  // page's JavaScript in dev tools.
+  const isAdmin = !!(window.ShreejiCurrentUser && window.ShreejiCurrentUser.isAdmin);
+  const currentUserEmail = (window.ShreejiCurrentUser && window.ShreejiCurrentUser.email) || "";
+  // Centralized helper: call this at the top of any mutating function.
+  // Shows a consistent toast and bails out — never silently no-ops.
+  function requireAdmin() {
+    if (!isAdmin) {
+      toast_("View-only access — ask an admin to make this change.", "error");
+      return false;
+    }
+    return true;
+  }
 
   // ── Real-time sync: merge remote changes without disturbing the screen ──
   // AuthGate's Firestore listener calls this on every snapshot AFTER the
@@ -1759,6 +1788,7 @@ function App() {
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [history, sessionDate, allMembers, attendance]);
   function mark(name, status) {
+    if (!requireAdmin()) return;
     const next = {
       ...attendance,
       [name]: {
@@ -1773,6 +1803,7 @@ function App() {
     saveAtt(next);
   }
   function setMemberTime(name, t) {
+    if (!requireAdmin()) return;
     const cur = attendance[name] || {};
     const next = {...attendance, [name]: {...cur, time: t}};
     setAttendance(next); saveAtt(next);
@@ -1942,7 +1973,7 @@ function App() {
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   function doReset() {
-    if (isViewer) { toast_("Viewers cannot reset attendance","error"); return; }
+    if (!requireAdmin()) return;
     const fresh = Object.fromEntries(allMembers.map(m => [m.name, {
       status: "A",
       time: ""
@@ -2136,6 +2167,7 @@ function App() {
 
   // ── Followup Restructuring helpers ─────────────────────────────────────────
   function doMoveMember() {
+    if (!requireAdmin()) return;
     if (!fpMoveName || !fpMoveTarget) {
       toast_("Select a member and target group", "error");
       return;
@@ -2151,6 +2183,7 @@ function App() {
     setFPMoveTarget("");
   }
   function doCreateFPGroup() {
+    if (!requireAdmin()) return;
     if (!fpNewName.trim()) {
       toast_("Enter a group name", "error");
       return;
@@ -2173,6 +2206,7 @@ function App() {
 
   // ── New Yuvak Registration helpers ────────────────────────────────────────
   function doRegister() {
+    if (!requireAdmin()) return;
     if (!regForm.fullName.trim()) {
       toast_("Full name is required", "error");
       return;
@@ -2209,6 +2243,7 @@ function App() {
     toast_(`${newY.name} registered successfully!`);
   }
   function doDeleteReg(name) {
+    if (!requireAdmin()) return;
     const upd = extraMembers.filter(m => m.name !== name);
     setExtraMembers(upd);
     saveMembers(upd);
@@ -2229,6 +2264,7 @@ function App() {
     });
   }
   function doSaveEdit() {
+    if (!requireAdmin()) return;
     if (!editForm.fullName.trim()) {
       toast_("Full name cannot be empty", "error");
       return;
@@ -2303,6 +2339,7 @@ function App() {
     toast_(`${newName} updated successfully!`);
   }
   function doDeleteEdit(name, isExtra) {
+    if (!requireAdmin()) return;
     if (isExtra) {
       const upd = extraMembers.filter(m => m.name !== name);
       setExtraMembers(upd);
@@ -2330,6 +2367,7 @@ function App() {
 
   // ── Category Override helpers ────────────────────────────────────────────
   function doSetCatOverride(name, cat) {
+    if (!requireAdmin()) return;
     const newOv = {
       ...catOverrides
     };
@@ -2367,6 +2405,7 @@ function App() {
     });
   }
   function saveProfileEdit() {
+    if (!requireAdmin()) return;
     if (!profileEditForm || !profileEditTarget) return;
     const oldName = profileEditTarget.name;
     const newName = profileEditForm.fullName.trim();
@@ -2448,7 +2487,7 @@ function App() {
   }, [allDates, histFrom, histTo]);
 
   // ── Edit a past attendance cell ───────────────────────────────────────────
-  function doHistEdit(memberName, date, newStatus) { if (isViewer) { toast_("Viewers cannot edit history","error"); return; }
+  function doHistEdit(memberName, date, newStatus) { if (!requireAdmin()) return;
     const newHist = history.map(s => {
       var _allMembers$find;
       if (s.date !== date) return s;
@@ -2475,6 +2514,7 @@ function App() {
     toast_(`${memberName} — ${date} updated to ${newStatus === "P" ? "Present" : "Absent"}`);
   }
   function doDeleteHistDate(date) {
+    if (!requireAdmin()) return;
     const newHist = history.filter(s => s.date !== date);
     setHistory(newHist);
     saveHist(newHist);
@@ -2670,6 +2710,7 @@ function App() {
 
   // ── Submit with notes + sabha type ───────────────────────────────────────
   function doSubmit() {
+    if (!requireAdmin()) return;
     const alreadyDone = history.some(s => s.date === sessionDate);
     if (alreadyDone) {
       toast_(`Already submitted for ${sessionDate}`, "error");
@@ -3086,6 +3127,7 @@ function App() {
     toast_("Backup downloaded!");
   }
   function doRestore(e) {
+    if (!requireAdmin()) { e.target.value = ""; return; }
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -3501,6 +3543,7 @@ function App() {
   // This clears the SHARED Firestore document — every signed-in user will
   // see the wipe in real time, since they're all looking at the same data.
   function doDeleteAll() {
+    if (!requireAdmin()) return;
     fsSet(LS_ATT, {});
     fsSet(LS_HIST, []);
     fsSet(LS_MEMBERS, []);
@@ -3559,6 +3602,7 @@ function App() {
   // entirely from the Excel. Every row becomes a fresh registered member.
   // Historic attendance keys are preserved (names still match in history).
   function doImportMemberExcel(e) {
+    if (!requireAdmin()) { e.target.value = ""; return; }
     var file = e.target.files[0];
     if (!file) return;
     var reader = new FileReader();
@@ -3648,8 +3692,14 @@ function App() {
     e.target.value = "";
   }
 
-  // All 15 tabs — all visible in the scrollable tab strip
-  var ALL_TABS=[
+  // All 15 tabs exist, but non-admins (view-only access) don't get tabs whose
+  // entire purpose is editing data — Followup reassignment, New Yuvak
+  // registration, Edit member, Excel import, and Settings (PIN/config/
+  // delete-all). Everything else (Attendance, Dashboard, Report, Historic,
+  // Monthly, Predict, Alerts, Actions, Compare, Profiles) stays visible —
+  // viewers can look at all of it, they just can't change anything.
+  var ADMIN_ONLY_TABS = ['restructure', 'register', 'edit', 'excel', 'settings'];
+  var ALL_TABS_FULL=[
     ['panel','📋','Attendance'],
     ['dashboard','📈','Dashboard'],
     ['report','📊','Report'],
@@ -3666,6 +3716,17 @@ function App() {
     ['excel','📥','Excel'],
     ['settings','⚙️','Settings'],
   ];
+  var ALL_TABS = isAdmin ? ALL_TABS_FULL : ALL_TABS_FULL.filter(function(item){ return ADMIN_ONLY_TABS.indexOf(item[0]) === -1; });
+
+  // Safety net: if a non-admin somehow lands on an admin-only tab (e.g. it
+  // was saved in their restored UI state from when they used to be an
+  // admin), bounce them back to Attendance instead of showing a broken
+  // edit screen with no working buttons.
+  useEffect(function(){
+    if (!isAdmin && ADMIN_ONLY_TABS.indexOf(tab) !== -1) {
+      setTab('panel');
+    }
+  }, [isAdmin, tab]);
 
   // Auto-scroll active tab pill into view whenever tab changes
   React.useEffect(function(){
@@ -3733,6 +3794,14 @@ function App() {
         onClick:function(){setShowPrintModal(true);},
         title:"Print","aria-label":"Print"
       },"🖨"),
+      !isAdmin && window.ShreejiCurrentUser && /*#__PURE__*/React.createElement("span",{
+        title:"Signed in as "+currentUserEmail+" — view only, ask an admin for edit access",
+        style:{
+          fontSize:11, fontWeight:700, padding:"4px 9px", borderRadius:20,
+          background:"rgba(255,255,255,.16)", color:"#fff", marginRight:4,
+          display:"inline-flex", alignItems:"center", gap:4
+        }
+      },"👁 View only"),
       pin&&/*#__PURE__*/React.createElement("button",{
         className:"navbar-btn",
         onClick:function(){setPinUnlocked(false);setPinInput("");},
@@ -9262,7 +9331,7 @@ function AuthGate() {
     const unsub = window.ShreejiFirebase.onAuthChange(function (u) {
       setUser(u);
       setAuthChecked(true);
-      window.ShreejiCurrentUser = u ? { email: u.email, name: u.displayName } : null;
+      window.ShreejiCurrentUser = u ? { email: u.email, name: u.displayName, isAdmin: window.ShreejiFirebase.isAdmin(u) } : null;
     });
     return unsub;
   }, [fbReady]);
