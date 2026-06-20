@@ -9399,6 +9399,19 @@ function AuthGate() {
     };
   }, []);
 
+  // Keep window.ShreejiStore's connection flags in sync with this component's
+  // state, so App (mounted further down, once everything's ready) can read
+  // the latest value reactively via its own small useEffect — same pattern
+  // as window.ShreejiCurrentUser. IMPORTANT: this hook (like every hook in
+  // this component) must run on every render, unconditionally — it sits
+  // here, before any of the conditional `return`s further down, so the
+  // hook count never changes between renders.
+  useEffect(function () {
+    window.ShreejiStore.isOffline = isOffline;
+    window.ShreejiStore.pendingSync = pendingSync;
+    window.dispatchEvent(new CustomEvent("shreeji-connection-change"));
+  }, [isOffline, pendingSync]);
+
   // Wait for the Firebase module script (top of <head>) to finish loading.
   useEffect(function () {
     if (fbReady) return;
@@ -9646,15 +9659,6 @@ function AuthGate() {
       )
     );
   }
-
-  // Keep window.ShreejiStore's connection flags in sync with this component's
-  // state, so App (mounted below) can read the latest value reactively via
-  // its own small useEffect — same pattern as window.ShreejiCurrentUser.
-  useEffect(function () {
-    window.ShreejiStore.isOffline = isOffline;
-    window.ShreejiStore.pendingSync = pendingSync;
-    window.dispatchEvent(new CustomEvent("shreeji-connection-change"));
-  }, [isOffline, pendingSync]);
 
   // ── Everything ready — mount the real app ───────────────────────────
   // App mounts exactly once per signed-in session. Real-time remote
