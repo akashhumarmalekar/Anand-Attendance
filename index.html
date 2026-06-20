@@ -41,7 +41,7 @@
   // ── 3) Admins can mark/edit attendance and all other data. Everyone else
   //      who signs in gets view-only access. Add more Gmail addresses here
   //      as you bring on other followup leaders who should have edit rights.
-  const ADMIN_EMAILS = ["akashhumarmalekar@gmail.com"];
+  const ADMIN_EMAILS = ["akashhumarmalekar@gmail.com", "itssuru0369@gmail.com"];
 
   // Shared document — every signed-in (allowed) user reads/writes the same data.
   const SHARED_DOC_PATH = ["shreeji", "shared-data"];
@@ -1462,10 +1462,24 @@ window.ShreejiStore = window.ShreejiStore || {
 // Pushes a single field to the shared Firestore doc. Fire-and-forget by
 // design — callers already update local React state + cache synchronously,
 // so the UI never waits on network latency.
+//
+// AUDIT TRAIL: every write also stamps _lastEditedBy / _lastEditedAt /
+// _lastEditedField on the shared doc, so any admin can see who changed
+// what last (visible in Settings → General, or in Firestore Console
+// under shreeji/shared-data directly). This is doc-level (one "last
+// editor" for the whole shared record), not a full per-field history —
+// see the per-mark/per-session attribution in mark()/doSubmit() for
+// finer-grained "who marked this person" tracking.
 function fsSet(field, value) {
   window.ShreejiStore.cache[field] = value;
   if (window.ShreejiFirebase) {
-    window.ShreejiFirebase.setSharedDoc({ [field]: value }, true).catch(e => {
+    const editor = (window.ShreejiCurrentUser && window.ShreejiCurrentUser.email) || "unknown";
+    window.ShreejiFirebase.setSharedDoc({
+      [field]: value,
+      _lastEditedBy: editor,
+      _lastEditedAt: new Date().toISOString(),
+      _lastEditedField: field
+    }, true).catch(e => {
       console.error("Firestore write failed for", field, e);
     });
   }
@@ -1683,6 +1697,28 @@ function App() {
     return true;
   }
 
+  // ── Connection status (offline / pending sync) ───────────────────────
+  // AuthGate tracks real connectivity (browser online/offline events +
+  // Firestore's own "serving from cache" signal) and dispatches an event
+  // whenever it changes. We mirror that into local state here so the
+  // navbar badge re-renders, without needing a heavier global state library.
+  const [connStatus, setConnStatus] = useState(function () {
+    return {
+      isOffline: !!(window.ShreejiStore && window.ShreejiStore.isOffline),
+      pendingSync: !!(window.ShreejiStore && window.ShreejiStore.pendingSync)
+    };
+  });
+  useEffect(function () {
+    function onConnChange() {
+      setConnStatus({
+        isOffline: !!(window.ShreejiStore && window.ShreejiStore.isOffline),
+        pendingSync: !!(window.ShreejiStore && window.ShreejiStore.pendingSync)
+      });
+    }
+    window.addEventListener("shreeji-connection-change", onConnChange);
+    return function () { window.removeEventListener("shreeji-connection-change", onConnChange); };
+  }, []);
+
   // ── Real-time sync: merge remote changes without disturbing the screen ──
   // AuthGate's Firestore listener calls this on every snapshot AFTER the
   // first (i.e. whenever the shared doc changes because someone else —
@@ -1788,7 +1824,7 @@ function App() {
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [history, sessionDate, allMembers, attendance]);
   function mark(name, status) {
-    if (!requireAdmin()) return;
+    if (!requireAdmin()) return false;
     const next = {
       ...attendance,
       [name]: {
@@ -1796,11 +1832,14 @@ function App() {
         time: status === "P" ? new Date().toLocaleTimeString("en-IN", {
           hour: "2-digit",
           minute: "2-digit"
-        }) : ""
+        }) : "",
+        markedBy: currentUserEmail,
+        markedAt: new Date().toISOString()
       }
     };
     setAttendance(next);
     saveAtt(next);
+    return true;
   }
   function setMemberTime(name, t) {
     if (!requireAdmin()) return;
@@ -1996,6 +2035,10 @@ function App() {
     setQResults(allMembers.filter(m => m.name.toLowerCase().includes(q)).slice(0, 8));
   }
   function confirmQMark(name) {
+    if (!requireAdmin()) {
+      qRef.current && qRef.current.focus();
+      return;
+    }
     const already = attendance[name] && attendance[name].status === "P";
     if (already) {
       toast_(`⚠️ ${name} is already marked Present`, "error");
@@ -2005,7 +2048,11 @@ function App() {
       qRef.current && qRef.current.focus();
       return;
     }
-    mark(name, "P");
+    const ok = mark(name, "P");
+    if (!ok) {
+      qRef.current && qRef.current.focus();
+      return;
+    }
     setQSearch("");
     setQResults([]);
     setQHighlight(0);
@@ -2732,7 +2779,9 @@ function App() {
       date: sessionDate,
       sabhaType,
       note: sessionNote.trim(),
-      records
+      records,
+      submittedBy: currentUserEmail,
+      submittedAt: new Date().toISOString()
     }];
     setHistory(newHist);
     saveHist(newHist);
@@ -3319,7 +3368,8 @@ function App() {
       }
       if (!focusName) return;
       e.preventDefault();
-      mark(focusName, key === "P" ? "P" : "A");
+      var marked = mark(focusName, key === "P" ? "P" : "A");
+      if (!marked) return;
       toast_(focusName.split(" ")[0] + " → " + (key === "P" ? "Present" : "Absent"));
       setTimeout(function() {
         var allRows = Array.from(document.querySelectorAll("[data-mkey]"));
@@ -3802,6 +3852,16 @@ function App() {
           display:"inline-flex", alignItems:"center", gap:4
         }
       },"👁 View only"),
+      (connStatus.isOffline || connStatus.pendingSync) && /*#__PURE__*/React.createElement("span",{
+        title: connStatus.isOffline
+          ? "No internet connection — changes are saved on this device and will sync once you're back online."
+          : "Weak/unstable connection — changes are saved on this device and syncing in the background.",
+        style:{
+          fontSize:11, fontWeight:700, padding:"4px 9px", borderRadius:20,
+          background:"rgba(251,191,36,.25)", color:"#fde68a", marginRight:4,
+          display:"inline-flex", alignItems:"center", gap:4
+        }
+      }, connStatus.isOffline ? "📡 Offline" : "🔄 Syncing…"),
       pin&&/*#__PURE__*/React.createElement("button",{
         className:"navbar-btn",
         onClick:function(){setPinUnlocked(false);setPinInput("");},
@@ -4944,12 +5004,14 @@ function App() {
   }, /*#__PURE__*/React.createElement("button", {
     className: "btn btn-green",
     onClick: () => {
+      if (!requireAdmin()) return;
       filtered.forEach(m => mark(m.name, "P"));
       toast_(`${filtered.length} marked present`);
     }
   }, "\u2713 All P"), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-red",
     onClick: () => {
+      if (!requireAdmin()) return;
       filtered.forEach(m => mark(m.name, "A"));
       toast_(`${filtered.length} marked absent`, "error");
     }
@@ -5409,6 +5471,7 @@ function App() {
       fontSize: 12
     },
     onClick: () => {
+      if (!requireAdmin()) return;
       regularAbsent.forEach(m => mark(m.name, "P"));
       toast_(`${regularAbsent.length} regular yuvaks marked present`);
     }
@@ -5535,7 +5598,7 @@ function App() {
     : /*#__PURE__*/React.createElement(React.Fragment, null,
         /*#__PURE__*/React.createElement("div", {style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}},
           /*#__PURE__*/React.createElement("div", {style:{fontSize:13,color:"#92400e",fontWeight:600}}, irregularAbsent.length, " Irregular Yuvak", irregularAbsent.length!==1?"s":"", " absent"),
-          /*#__PURE__*/React.createElement("button", {className:"btn btn-green",style:{fontSize:12},onClick:function(){ irregularAbsent.forEach(function(m){mark(m.name,"P");}); toast_(irregularAbsent.length+" irregular yuvaks marked present"); }}, "\u2713 Mark All Present")
+          /*#__PURE__*/React.createElement("button", {className:"btn btn-green",style:{fontSize:12},onClick:function(){ if (!requireAdmin()) return; irregularAbsent.forEach(function(m){mark(m.name,"P");}); toast_(irregularAbsent.length+" irregular yuvaks marked present"); }}, "\u2713 Mark All Present")
         ),
         /*#__PURE__*/React.createElement("div", {className:"card",style:{overflow:"hidden"}},
           /*#__PURE__*/React.createElement("div", {style:{display:"flex",padding:"8px 12px",background:"#fffbeb",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",borderBottom:"1px solid #fef3c7"}},
@@ -7585,8 +7648,11 @@ function App() {
           textOverflow: "ellipsis",
           whiteSpace: "nowrap"
         },
-        title: s.note
-      }, "\uD83D\uDCDD ", s.note));
+        title: s.note + (s.submittedBy ? ` — submitted by ${s.submittedBy}` : "")
+      }, "\uD83D\uDCDD ", s.note), !s.note && s.submittedBy && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 8, color: "#aaa", marginTop: 1 },
+        title: `Submitted by ${s.submittedBy}`
+      }, "👤 ", s.submittedBy.split("@")[0]));
     }))), /*#__PURE__*/React.createElement("div", {
       style: {
         padding: "0 18px 16px"
@@ -8619,7 +8685,19 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
       color: settingsTab === id ? "#1a1a1a" : "#888",
       marginBottom: -1
     }
-  }, label))), settingsTab === "general" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, label))), settingsTab === "general" && /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement("div", {
+      className: "card",
+      style: { padding: "14px 20px", marginBottom: 14, background: darkMode ? "#1e293b" : "#f8fafc", fontSize: 12.5 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, marginBottom: 4, color: darkMode ? "#cbd5e1" : "#475569" } }, "📝 Audit trail"),
+      /*#__PURE__*/React.createElement("div", { style: { color: darkMode ? "#94a3b8" : "#64748b" } },
+        fsGet("_lastEditedBy", null)
+          ? `Last change by ${fsGet("_lastEditedBy", "")} on the "${fsGet("_lastEditedField", "")}" field, at ${new Date(fsGet("_lastEditedAt", Date.now())).toLocaleString("en-IN")}.`
+          : "No edits recorded yet."
+      )
+    ),
+    /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 20,
@@ -9298,7 +9376,28 @@ function AuthGate() {
   const [firestoreError, setFirestoreError] = useState("");
   const [docExists, setDocExists] = useState(true);
   const [migrating, setMigrating] = useState(false);
+  const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" && navigator.onLine === false);
+  const [pendingSync, setPendingSync] = useState(false);
   const hasLoadedOnceRef = useRef(false);
+
+  // ── Offline detection ────────────────────────────────────────────────
+  // Two signals, since either alone misses real cases:
+  //  1. navigator.onLine — catches "no internet connection at all"
+  //     (airplane mode, wifi off). Browser-native, instant.
+  //  2. snap.metadata.fromCache (checked in the listener below) — catches
+  //     the more common venue scenario: connected to wifi/data, but too
+  //     weak/slow to actually reach Firestore's servers, so reads are
+  //     served from the local cache and writes are queued, not yet synced.
+  useEffect(function () {
+    function goOnline() { setIsOffline(false); }
+    function goOffline() { setIsOffline(true); }
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return function () {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
 
   // Wait for the Firebase module script (top of <head>) to finish loading.
   useEffect(function () {
@@ -9357,6 +9456,11 @@ function AuthGate() {
       window.ShreejiStore.cache = nextData;
       setDocExists(snap.exists());
       window.ShreejiStore.ready = true;
+      // metadata.fromCache is true when Firestore can't currently reach its
+      // servers and is serving the last-known local snapshot instead. This
+      // is the more reliable real-world offline signal — a phone can show
+      // full wifi bars while Firestore itself is unreachable.
+      if (snap.metadata) setPendingSync(!!snap.metadata.fromCache);
       if (!hasLoadedOnceRef.current) {
         hasLoadedOnceRef.current = true;
         setStoreReady(true);
@@ -9542,6 +9646,15 @@ function AuthGate() {
       )
     );
   }
+
+  // Keep window.ShreejiStore's connection flags in sync with this component's
+  // state, so App (mounted below) can read the latest value reactively via
+  // its own small useEffect — same pattern as window.ShreejiCurrentUser.
+  useEffect(function () {
+    window.ShreejiStore.isOffline = isOffline;
+    window.ShreejiStore.pendingSync = pendingSync;
+    window.dispatchEvent(new CustomEvent("shreeji-connection-change"));
+  }, [isOffline, pendingSync]);
 
   // ── Everything ready — mount the real app ───────────────────────────
   // App mounts exactly once per signed-in session. Real-time remote
