@@ -1484,6 +1484,30 @@ function fsSet(field, value) {
     });
   }
 }
+// Writes MULTIPLE fields to Firestore in a single call. This matters: each
+// fsSet() above fires its own independent, unawaited network request, so
+// calling fsSet() many times in a row (e.g. during an import that wipes 6
+// fields then writes 3 more) has no ordering guarantee — two of those
+// requests can arrive at Firestore's servers in a different order than
+// they were sent, and a later-arriving "clear" can silently overwrite an
+// earlier-arriving real write. fsSetMany sends everything as ONE request,
+// so there's nothing left to race. Always prefer this over several fsSet
+// calls back-to-back for the same logical operation (import, delete-all,
+// restore, etc).
+function fsSetMany(fields) {
+  Object.assign(window.ShreejiStore.cache, fields);
+  if (window.ShreejiFirebase) {
+    const editor = (window.ShreejiCurrentUser && window.ShreejiCurrentUser.email) || "unknown";
+    const lastField = Object.keys(fields)[Object.keys(fields).length - 1] || "";
+    window.ShreejiFirebase.setSharedDoc(Object.assign({}, fields, {
+      _lastEditedBy: editor,
+      _lastEditedAt: new Date().toISOString(),
+      _lastEditedField: lastField
+    }), true).catch(e => {
+      console.error("Firestore batched write failed for fields", Object.keys(fields), e);
+    });
+  }
+}
 function fsGet(field, fallback) {
   const c = window.ShreejiStore.cache;
   return (c && Object.prototype.hasOwnProperty.call(c, field)) ? c[field] : fallback;
@@ -3242,26 +3266,17 @@ function App() {
     reader.onload = ev => {
       try {
         const data = JSON.parse(ev.target.result);
-        if (data.history) {
-          setHistory(data.history);
-          saveHist(data.history);
-        }
-        if (data.attendance) {
-          setAttendance(data.attendance);
-          saveAtt(data.attendance);
-        }
-        if (data.extraMembers) {
-          setExtraMembers(data.extraMembers);
-          saveMembers(data.extraMembers);
-        }
-        if (data.fpOverrides) {
-          setFPOverrides(data.fpOverrides);
-          saveFPOverrides(data.fpOverrides);
-        }
-        if (data.sessionNotes) {
-          setSessionNotes(data.sessionNotes);
-          saveNotes(data.sessionNotes);
-        }
+        // Collect everything present in the backup into ONE write, instead
+        // of up to 5 separate fsSet() calls racing each other over the
+        // network (same class of bug fixed in doImportMemberExcel/
+        // doDeleteAll — see fsSetMany's definition for the full story).
+        const toWrite = {};
+        if (data.history) { setHistory(data.history); toWrite[LS_HIST] = data.history; }
+        if (data.attendance) { setAttendance(data.attendance); toWrite[LS_ATT] = data.attendance; }
+        if (data.extraMembers) { setExtraMembers(data.extraMembers); toWrite[LS_MEMBERS] = data.extraMembers; }
+        if (data.fpOverrides) { setFPOverrides(data.fpOverrides); toWrite[LS_FP] = data.fpOverrides; }
+        if (data.sessionNotes) { setSessionNotes(data.sessionNotes); toWrite[LS_NOTES] = data.sessionNotes; }
+        if (Object.keys(toWrite).length > 0) fsSetMany(toWrite);
         toast_("Data restored successfully!");
       } catch (err) {
         toast_("Invalid backup file", "error");
@@ -3653,20 +3668,20 @@ function App() {
   // see the wipe in real time, since they're all looking at the same data.
   function doDeleteAll() {
     if (!requireAdmin()) return;
-    fsSet(LS_ATT, {});
-    fsSet(LS_HIST, []);
-    fsSet(LS_MEMBERS, []);
-    fsSet(LS_FP, {});
-    fsSet(LS_NOTES, {});
-    fsSet(LS_CAT_OV, {});
-    fsSet("shreeji_abs_reasons", {});
-    fsSet("shreeji_extra_groups", []);
-    fsSet("shreeji_ref_overrides", {});
-    fsSet("shreeji_start_time", "20:00");
-    fsSet(LS_SABHA, "Weekly");
-
-    // Suppress Master DB so hardcoded members also disappear
-    fsSet("shreeji_suppress_master", true);
+    fsSetMany({
+      [LS_ATT]: {},
+      [LS_HIST]: [],
+      [LS_MEMBERS]: [],
+      [LS_FP]: {},
+      [LS_NOTES]: {},
+      [LS_CAT_OV]: {},
+      "shreeji_abs_reasons": {},
+      "shreeji_extra_groups": [],
+      "shreeji_ref_overrides": {},
+      "shreeji_start_time": "20:00",
+      [LS_SABHA]: "Weekly",
+      "shreeji_suppress_master": true
+    });
     setSuppressMaster(true);
 
     // Reset all React state to empty / defaults
@@ -3896,32 +3911,32 @@ function App() {
             };
           });
 
-        // ── Wipe everything and replace ──────────────────────────────
-        // 1. Suppress hardcoded MASTER array
-        fsSet("shreeji_suppress_master", true);
+        // ── Wipe everything and replace, in ONE atomic Firestore write ──
+        // Previously this issued 8 separate fsSet() calls in a row (clear
+        // members, clear history, ... then save the new history). Each is
+        // an independent unawaited network request, so there was no
+        // guarantee they'd arrive at Firestore in the order they were
+        // sent — the "clear history" request could arrive AFTER the "save
+        // new history" request and silently wipe the freshly-imported
+        // data. Bundling everything into one fsSetMany() call removes the
+        // race entirely: there's only one request, so nothing can overtake
+        // it.
+        fsSetMany({
+          "shreeji_suppress_master": true,
+          [LS_MEMBERS]: newMembers,
+          [LS_FP]: {},
+          [LS_CAT_OV]: newCatOv,
+          [LS_ATT]: {},
+          [LS_HIST]: newHistory,
+          "shreeji_ref_overrides": {}
+        });
+
+        // React state mirrors the write above exactly, so the screen
+        // reflects the new data immediately without waiting on Firestore.
         setSuppressMaster(true);
-
-        // 2. Clear ALL existing data (members, attendance, overrides, history)
-        fsSet(LS_MEMBERS, []);
-        fsSet(LS_FP, {});
-        fsSet(LS_CAT_OV, {});
-        fsSet(LS_ATT, {});
-        fsSet(LS_HIST, []);
-        fsSet("shreeji_ref_overrides", {});
-
-        // 3. Wipe React state fully first, then apply new data
         setAttendance({});
-        setExtraMembers([]);
         setFPOverrides({});
         setReferenceOverrides({});
-        setCatOverrides({});
-        setHistory([]);
-
-        // 4. Save and apply new member list, categories, and history
-        saveMembers(newMembers);
-        saveCatOv(newCatOv);
-        saveHist(newHistory);
-
         setExtraMembers(newMembers);
         setCatOverrides(newCatOv);
         setHistory(newHistory);
