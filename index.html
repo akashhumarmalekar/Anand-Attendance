@@ -1487,6 +1487,35 @@ function saveNotes(n) { fsSet(LS_NOTES, n); }
 function loadCatOv() { return fsGet(LS_CAT_OV, {}); }
 function saveCatOv(o) { fsSet(LS_CAT_OV, o); }
 
+// ─── UI state persistence (per-device, localStorage — NOT shared data) ──────
+// Unlike attendance/history/etc. above, which are shared across every
+// signed-in user via Firestore, the UI state below (which tab is open,
+// active filters, search text, scroll position) is personal to this
+// browser. It has no business living in the shared Firestore document —
+// two followup leaders on two different devices should each keep their
+// own place in the app. So this stays in plain localStorage.
+const LS_UI_STATE = "shreeji_ui_state";
+
+// Saves the full UI snapshot in one write. Called on every relevant
+// change (debounced for scroll) so a refresh always lands back where
+// the person left off.
+function saveUIState(state) {
+  try {
+    const existing = JSON.parse(localStorage.getItem(LS_UI_STATE) || "{}");
+    localStorage.setItem(LS_UI_STATE, JSON.stringify(Object.assign({}, existing, state)));
+  } catch (e) {}
+}
+
+// Reads the full UI snapshot. Returns {} (not null) so callers can safely
+// destructure with defaults: const { tab = "panel" } = restoreUIState();
+function restoreUIState() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_UI_STATE) || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+
 // ─── Category logic ───────────────────────────────────────────────────────────
 // Returns "R" | "I" | "N" based on last N sessions in history
 function calcCategory(name, history) {
@@ -1511,8 +1540,13 @@ const todayStr = new Date().toLocaleDateString("en-IN", {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 function App() {
-  const [tab, setTab] = useState("panel");
-  const [panelSubTab, setPanelSubTab] = useState("all");
+  // Read the saved UI snapshot ONCE per mount. Every UI-state useState
+  // below pulls its initial value from this so a page refresh reopens
+  // the same tab with the same filters/search/scroll instead of always
+  // defaulting back to the Attendance screen.
+  const restoredUI = restoreUIState();
+  const [tab, setTab] = useState(restoredUI.tab || "panel");
+  const [panelSubTab, setPanelSubTab] = useState(restoredUI.panelSubTab || "all");
   const [attendance, setAttendance] = useState(loadAtt);
   const [history, setHistory] = useState(loadHist);
   const [extraMembers, setExtraMembers] = useState(loadMembers);
@@ -1523,8 +1557,8 @@ function App() {
   const [sessionNotes, setSessionNotes] = useState(loadNotes);
   const [sessionNote, setSessionNote] = useState("");
   const [catOverrides, setCatOverrides] = useState(loadCatOv);
-  const [search, setSearch] = useState("");
-  const [filterFP, setFilterFP] = useState("All");
+  const [search, setSearch] = useState(restoredUI.search || "");
+  const [filterFP, setFilterFP] = useState(restoredUI.filterFP || "All");
   const [qSearch, setQSearch] = useState("");
   const [qResults, setQResults] = useState([]);
   const [qHighlight, setQHighlight] = useState(0);
@@ -1532,11 +1566,11 @@ function App() {
   const [toast, setToast] = useState(null);
   const [showReset, setShowReset] = useState(false);
   const [showSubmit, setShowSubmit] = useState(false);
-  const [histSearch, setHistSearch] = useState("");
-  const [histSort, setHistSort] = useState("name");
-  const [histSortDir, setHistSortDir] = useState(1);
-  const [histFrom, setHistFrom] = useState("");
-  const [histTo, setHistTo] = useState(""); const [histDateFilter, setHistDateFilter] = useState({date: null, status: "ALL"});
+  const [histSearch, setHistSearch] = useState(restoredUI.histSearch || "");
+  const [histSort, setHistSort] = useState(restoredUI.histSort || "name");
+  const [histSortDir, setHistSortDir] = useState(typeof restoredUI.histSortDir === "number" ? restoredUI.histSortDir : 1);
+  const [histFrom, setHistFrom] = useState(restoredUI.histFrom || "");
+  const [histTo, setHistTo] = useState(restoredUI.histTo || ""); const [histDateFilter, setHistDateFilter] = useState(restoredUI.histDateFilter || {date: null, status: "ALL"});
   const [histEditCell, setHistEditCell] = useState(null);
   const [deleteHistDate, setDeleteHistDate] = useState(null);
   // Profile drawer
@@ -1551,7 +1585,7 @@ function App() {
   // Settings tab
   const [settingsTab, setSettingsTab] = useState("general");
   // Monthly summary
-  const [monthlyFP, setMonthlyFP] = useState("All");
+  const [monthlyFP, setMonthlyFP] = useState(restoredUI.monthlyFP || "All");
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("shreeji_dark") === "1");
   // Year-over-year
@@ -1594,14 +1628,14 @@ function App() {
   const [regSearch, setRegSearch] = useState("");
   const [regDeleteConfirm, setRegDeleteConfirm] = useState(null);
   // ── Edit Yuvak state
-  const [editSearch, setEditSearch] = useState("");
-  const [editFilter, setEditFilter] = useState("All");
+  const [editSearch, setEditSearch] = useState(restoredUI.editSearch || "");
+  const [editFilter, setEditFilter] = useState(restoredUI.editFilter || "All");
   const [editTarget, setEditTarget] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [editDeleteConfirm, setEditDeleteConfirm] = useState(null);
   // ── Profiles tab state
-  const [profileSearch, setProfileSearch] = useState("");
-  const [profileFPFilter, setProfileFPFilter] = useState("All");
+  const [profileSearch, setProfileSearch] = useState(restoredUI.profileSearch || "");
+  const [profileFPFilter, setProfileFPFilter] = useState(restoredUI.profileFPFilter || "All");
   const [profileEditTarget, setProfileEditTarget] = useState(null);
   const [profileEditForm, setProfileEditForm] = useState(null);
   // ── Reference overrides (for MASTER members that don't have reference in their object)
@@ -1619,6 +1653,40 @@ function App() {
   const [suppressMaster, setSuppressMaster] = useState(function() {
     return fsGet(LS_SUPPRESS_MASTER, false);
   });
+
+  // ── Real-time sync: merge remote changes without disturbing the screen ──
+  // AuthGate's Firestore listener calls this on every snapshot AFTER the
+  // first (i.e. whenever the shared doc changes because someone else —
+  // or this same browser in another tab — updated something). We only
+  // touch the DATA setters below; tab, search, filters, scroll position,
+  // open modals, and any in-progress typing are never touched. Each field
+  // is only re-applied if it actually changed, to avoid pointless re-renders.
+  useEffect(function () {
+    window.ShreejiStore.onRemoteUpdate = function (next, prev) {
+      next = next || {};
+      prev = prev || {};
+      if (next[LS_ATT] !== prev[LS_ATT]) setAttendance(next[LS_ATT] || {});
+      if (next[LS_HIST] !== prev[LS_HIST]) setHistory(next[LS_HIST] || []);
+      if (next[LS_MEMBERS] !== prev[LS_MEMBERS]) setExtraMembers(next[LS_MEMBERS] || []);
+      if (next[LS_FP] !== prev[LS_FP]) setFPOverrides(next[LS_FP] || {});
+      if (next[LS_NOTES] !== prev[LS_NOTES]) setSessionNotes(next[LS_NOTES] || {});
+      if (next[LS_CAT_OV] !== prev[LS_CAT_OV]) setCatOverrides(next[LS_CAT_OV] || {});
+      if (next["shreeji_ref_overrides"] !== prev["shreeji_ref_overrides"]) setReferenceOverrides(next["shreeji_ref_overrides"] || {});
+      if (next["shreeji_abs_reasons"] !== prev["shreeji_abs_reasons"]) setAbsenceReasons(next["shreeji_abs_reasons"] || {});
+      if (next[LS_PIN] !== prev[LS_PIN]) setPin(next[LS_PIN] || "");
+      if (next[LS_VIEWER_PIN] !== prev[LS_VIEWER_PIN]) setViewerPin(next[LS_VIEWER_PIN] || "");
+      if (next[LS_SABHA] !== prev[LS_SABHA]) setSabhaType(next[LS_SABHA] || "Weekly");
+      if (next["shreeji_start_time"] !== prev["shreeji_start_time"]) setSessionStartTime(next["shreeji_start_time"] || "20:00");
+      if (next[LS_SUPPRESS_MASTER] !== prev[LS_SUPPRESS_MASTER]) setSuppressMaster(!!next[LS_SUPPRESS_MASTER]);
+    };
+    return function () {
+      // Only clear if we're still the registered handler (avoids a brief
+      // gap during any future remount where another instance takes over).
+      if (window.ShreejiStore && window.ShreejiStore.onRemoteUpdate) {
+        delete window.ShreejiStore.onRemoteUpdate;
+      }
+    };
+  }, []);
 
   // On mount: if an old broken import left stale extraMembers alongside suppressMaster=false,
   // there's nothing we can do retroactively — but if suppressMaster IS true we trust the
@@ -3136,6 +3204,62 @@ function App() {
     document.body.style.background = darkMode ? "#0f172a" : "#f5f4f0";
     document.body.style.color = darkMode ? "#e2e8f0" : "#1a1a1a";
   }, [darkMode]);
+
+  // ── UI state persistence (tab, filters, search) ─────────────────────────
+  // Whenever the person navigates or changes a filter/search box, save a
+  // fresh snapshot to localStorage so a page refresh reopens the same
+  // screen with the same filters instead of defaulting back to Attendance.
+  useEffect(function () {
+    saveUIState({
+      tab, panelSubTab, search, filterFP,
+      histSearch, histSort, histSortDir, histFrom, histTo, histDateFilter,
+      monthlyFP, editSearch, editFilter, profileSearch, profileFPFilter
+    });
+  }, [
+    tab, panelSubTab, search, filterFP,
+    histSearch, histSort, histSortDir, histFrom, histTo, histDateFilter,
+    monthlyFP, editSearch, editFilter, profileSearch, profileFPFilter
+  ]);
+
+  // ── Scroll position persistence ──────────────────────────────────────────
+  // .main-content is the single scrollable container for every tab. We save
+  // its scroll offset per tab (so switching tabs doesn't fight over one
+  // saved number) and restore it after the tab's content has painted.
+  useEffect(function () {
+    const el = document.querySelector(".main-content");
+    if (!el) return;
+    let saveTimer = null;
+    function onScroll() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(function () {
+        const current = restoreUIState();
+        const scrollByTab = Object.assign({}, current.scrollByTab || {});
+        scrollByTab[tab] = el.scrollTop;
+        saveUIState({ scrollByTab });
+      }, 150);
+    }
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return function () {
+      clearTimeout(saveTimer);
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [tab]);
+
+  // Restores scroll position when the tab changes (including the very
+  // first render after a page refresh, since `tab` is already restored
+  // from localStorage by the time this runs).
+  useEffect(function () {
+    const el = document.querySelector(".main-content");
+    if (!el) return;
+    const saved = restoreUIState();
+    const y = (saved.scrollByTab && saved.scrollByTab[tab]) || 0;
+    // Wait one frame so the new tab's content has rendered and the
+    // container actually has enough height to scroll to that offset.
+    const raf = requestAnimationFrame(function () {
+      el.scrollTop = y;
+    });
+    return function () { cancelAnimationFrame(raf); };
+  }, [tab]);
 
   // NEW: keyboard shortcuts P/A
   useEffect(function() {
@@ -9103,10 +9227,8 @@ function AuthGate() {
   const [authError, setAuthError] = useState("");
   const [storeReady, setStoreReady] = useState(false);
   const [firestoreError, setFirestoreError] = useState("");
-  const [mountKey, setMountKey] = useState(0);
   const [docExists, setDocExists] = useState(true);
   const [migrating, setMigrating] = useState(false);
-  const [hasRemoteUpdate, setHasRemoteUpdate] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
   // Wait for the Firebase module script (top of <head>) to finish loading.
@@ -9146,32 +9268,31 @@ function AuthGate() {
   }, [fbReady]);
 
   // Once signed in AND allowed, open the real-time Firestore listener.
+  // This listener is the single source of truth for window.ShreejiStore.cache.
+  // On the FIRST snapshot, it flips storeReady so App() mounts and reads the
+  // cache via its useState(loadX) initializers. On every snapshot AFTER
+  // that (i.e. someone else's change arriving), it does NOT touch any UI
+  // state and does NOT remount App — it just updates the cache and, if App
+  // has registered a merge handler (window.ShreejiStore.onRemoteUpdate),
+  // calls it so App can push the new values into its own data state via
+  // setAttendance/setHistory/etc. directly. Tab, filters, search, scroll,
+  // and any open forms are never touched.
   useEffect(function () {
     if (!fbReady || !user) return;
     if (!window.ShreejiFirebase.isAllowed(user)) return;
     setStoreReady(false);
     hasLoadedOnceRef.current = false;
     const unsub = window.ShreejiFirebase.listenSharedDoc(function (snap) {
-      if (snap.exists()) {
-        window.ShreejiStore.cache = snap.data() || {};
-        setDocExists(true);
-      } else {
-        window.ShreejiStore.cache = {};
-        setDocExists(false);
-      }
+      const nextData = snap.exists() ? (snap.data() || {}) : {};
+      const prevData = window.ShreejiStore.cache;
+      window.ShreejiStore.cache = nextData;
+      setDocExists(snap.exists());
       window.ShreejiStore.ready = true;
       if (!hasLoadedOnceRef.current) {
         hasLoadedOnceRef.current = true;
         setStoreReady(true);
-      } else {
-        // Remote change after initial load (e.g. another followup leader
-        // marked attendance elsewhere). The cache above is already fresh —
-        // we deliberately do NOT auto-remount App here, since that would
-        // wipe any in-progress, not-yet-saved typing (like the session note
-        // textarea). Instead, flag it so the navbar can offer a manual
-        // refresh the person can tap when they're ready.
-        window.ShreejiStore.hasRemoteUpdate = true;
-        setHasRemoteUpdate(true);
+      } else if (typeof window.ShreejiStore.onRemoteUpdate === "function") {
+        window.ShreejiStore.onRemoteUpdate(nextData, prevData);
       }
     });
     return unsub;
@@ -9213,9 +9334,11 @@ function AuthGate() {
     window.ShreejiFirebase.setSharedDoc(payload, true)
       .then(function () {
         window.ShreejiStore.cache = Object.assign({}, window.ShreejiStore.cache, payload);
+        window.ShreejiStore.ready = true;
+        hasLoadedOnceRef.current = true;
         setDocExists(true);
         setMigrating(false);
-        setMountKey(function (k) { return k + 1; });
+        setStoreReady(true);
       })
       .catch(function (e) {
         setFirestoreError("Migration failed: " + (e.message || e));
@@ -9352,33 +9475,12 @@ function AuthGate() {
   }
 
   // ── Everything ready — mount the real app ───────────────────────────
-  function refreshFromRemote() {
-    setHasRemoteUpdate(false);
-    window.ShreejiStore.hasRemoteUpdate = false;
-    setMountKey(function (k) { return k + 1; });
-  }
-  window.ShreejiRefreshFromRemote = refreshFromRemote;
-
-  return /*#__PURE__*/React.createElement(React.Fragment, null,
-    hasRemoteUpdate && /*#__PURE__*/React.createElement("div", {
-      style: {
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 9998,
-        background: "#2563eb", color: "#fff", textAlign: "center",
-        padding: "9px 14px", fontSize: 13, fontWeight: 600,
-        display: "flex", alignItems: "center", justifyContent: "center", gap: 10
-      }
-    },
-      "Someone else updated the shared data.",
-      /*#__PURE__*/React.createElement("button", {
-        onClick: refreshFromRemote,
-        style: {
-          background: "#fff", color: "#2563eb", border: "none", borderRadius: 7,
-          padding: "4px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer"
-        }
-      }, "Refresh now")
-    ),
-    /*#__PURE__*/React.createElement(App, { key: mountKey })
-  );
+  // App mounts exactly once per signed-in session. Real-time remote
+  // updates are merged into App's own data state directly (see App's
+  // useEffect subscribing to window.ShreejiStore.onRemoteUpdate) — no
+  // remount, no banner, no popup, no interruption to whatever the person
+  // is doing on screen.
+  return /*#__PURE__*/React.createElement(App, null);
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(AuthGate, null));
