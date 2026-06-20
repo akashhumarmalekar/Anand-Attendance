@@ -1542,16 +1542,38 @@ function restoreUIState() {
 
 // ─── Category logic ───────────────────────────────────────────────────────────
 // Returns "R" | "I" | "N" based on last N sessions in history
+// ─── Category criteria (editable in Settings → General) ────────────────────
+// These four numbers define what "Regular", "Irregular", and "No" mean.
+// Stored in the shared Firestore doc (same field naming convention as the
+// rest of the app's settings) so every admin sees and edits the same
+// criteria — this is a shared policy, not a per-device preference.
+const LS_CAT_CRITERIA = "shreeji_cat_criteria";
+const DEFAULT_CAT_CRITERIA = {
+  regularWindow: 4,   // look at the last N sessions for "Regular"
+  regularMin: 1,      // present in at least this many of them → Regular
+  irregularWindow: 6, // otherwise, look at the last N sessions for "Irregular"
+  irregularMin: 1     // present in at least this many of them → Irregular
+  // present in fewer than irregularMin within irregularWindow → "No"
+};
+function loadCatCriteria() {
+  const c = fsGet(LS_CAT_CRITERIA, {});
+  // Merge with defaults so a partially-saved/older config never produces
+  // NaN windows (which would silently break every category calculation).
+  return Object.assign({}, DEFAULT_CAT_CRITERIA, c);
+}
+function saveCatCriteria(c) { fsSet(LS_CAT_CRITERIA, c); }
+
 function calcCategory(name, history) {
+  const crit = loadCatCriteria();
   // Get all records for this person in chronological order (most recent last)
   const sessions = history.filter(s => s.records.some(r => r.name === name));
   if (sessions.length === 0) return "N";
-  const recent6 = sessions.slice(-6);
-  const recent4 = sessions.slice(-4);
-  const attended4 = recent4.filter(s => s.records.find(r => r.name === name && r.status === "P")).length;
-  const attended6 = recent6.filter(s => s.records.find(r => r.name === name && r.status === "P")).length;
-  if (attended4 >= 1) return "R";
-  if (attended6 >= 1) return "I";
+  const recentReg = sessions.slice(-crit.regularWindow);
+  const recentIrr = sessions.slice(-crit.irregularWindow);
+  const attendedReg = recentReg.filter(s => s.records.find(r => r.name === name && r.status === "P")).length;
+  const attendedIrr = recentIrr.filter(s => s.records.find(r => r.name === name && r.status === "P")).length;
+  if (attendedReg >= crit.regularMin) return "R";
+  if (attendedIrr >= crit.irregularMin) return "I";
   return "N";
 }
 
@@ -1678,6 +1700,12 @@ function App() {
     return fsGet(LS_SUPPRESS_MASTER, false);
   });
 
+  // Category criteria (Regular/Irregular/No thresholds). React state so
+  // editing it in Settings re-renders every screen that shows a category —
+  // calcCategory() itself reads the live Firestore-backed value via
+  // loadCatCriteria(), this state's only job is to trigger that re-render.
+  const [catCriteria, setCatCriteria] = useState(loadCatCriteria);
+
   // ── Admin access (Google-account based) ──────────────────────────────
   // This is the AUTHORITATIVE permission check for the whole app: only
   // the Gmail addresses listed in ADMIN_EMAILS (top of the <head> Firebase
@@ -1695,6 +1723,36 @@ function App() {
       return false;
     }
     return true;
+  }
+
+  // Updates one field of the category criteria, validates it, persists to
+  // Firestore, and updates local state immediately so the change is visible
+  // without waiting for the round-trip snapshot.
+  function updateCatCriteria(field, rawValue) {
+    if (!requireAdmin()) return;
+    var n = parseInt(rawValue, 10);
+    if (isNaN(n) || n < 1) {
+      toast_("Enter a whole number of 1 or more", "error");
+      return;
+    }
+    var next = Object.assign({}, catCriteria, { [field]: n });
+    // Keep windows sane relative to each other: Irregular's lookback window
+    // should be at least as long as Regular's, otherwise someone could
+    // qualify for "Regular" but the same attendance would somehow fail the
+    // (shorter) "Irregular" check — confusing and not internally consistent.
+    if (next.irregularWindow < next.regularWindow) {
+      toast_("Irregular's session window should be \u2265 Regular's window", "error");
+      return;
+    }
+    setCatCriteria(next);
+    saveCatCriteria(next);
+    toast_("Category criteria updated — categories will refresh everywhere.");
+  }
+  function resetCatCriteria() {
+    if (!requireAdmin()) return;
+    setCatCriteria(DEFAULT_CAT_CRITERIA);
+    saveCatCriteria(DEFAULT_CAT_CRITERIA);
+    toast_("Category criteria reset to defaults.");
   }
 
   // ── Connection status (offline / pending sync) ───────────────────────
@@ -1743,6 +1801,7 @@ function App() {
       if (next[LS_SABHA] !== prev[LS_SABHA]) setSabhaType(next[LS_SABHA] || "Weekly");
       if (next["shreeji_start_time"] !== prev["shreeji_start_time"]) setSessionStartTime(next["shreeji_start_time"] || "20:00");
       if (next[LS_SUPPRESS_MASTER] !== prev[LS_SUPPRESS_MASTER]) setSuppressMaster(!!next[LS_SUPPRESS_MASTER]);
+      if (next[LS_CAT_CRITERIA] !== prev[LS_CAT_CRITERIA]) setCatCriteria(Object.assign({}, DEFAULT_CAT_CRITERIA, next[LS_CAT_CRITERIA] || {}));
     };
     return function () {
       // Only clear if we're still the registered handler (avoids a brief
@@ -3647,6 +3706,58 @@ function App() {
     toast_("Member directory exported! (" + rows.length + " members)");
   }
 
+  // ── Excel Tab: Export full reference-format file (members + history) ───
+  // Produces the SAME column layout as the file you import: Full Name,
+  // Followup, Reference, Contact, Category, then one column per historic
+  // session date (P/A per member). This is the round-trip counterpart to
+  // doImportMemberExcel — exporting this file and re-importing it later
+  // should reproduce the same data (history sorted chronologically,
+  // categories pinned via catOverrides exactly as they are now).
+  function genFullReferenceExcel() {
+    var wb = XLSX.utils.book_new();
+    var catLabel = { "R": "Regular", "I": "Irregular", "N": "No" };
+
+    // Sort history chronologically (DD-MM-YYYY strings aren't naturally
+    // sortable as strings, so parse each into a real Date for ordering).
+    function parseDDMMYYYY(s) {
+      var p = String(s).split("-");
+      if (p.length !== 3) return new Date(0);
+      return new Date(+p[2], +p[1] - 1, +p[0]);
+    }
+    var sortedHistory = history.slice().sort(function(a, b) {
+      return parseDDMMYYYY(a.date) - parseDDMMYYYY(b.date);
+    });
+
+    var rows = allMembers.map(function(m) {
+      var ref = m.isExtra ? (m.reference || "") : (referenceOverrides[m.name] || "");
+      var catCode = catOverrides[m.name] || calcCategory(m.name, history);
+      var row = {
+        "Full Name": m.name,
+        "Followup":  fpOverrides[m.name] || m.followup,
+        "Reference": ref,
+        "Contact":   m.contact || "",
+        "Category":  catLabel[catCode] || "No"
+      };
+      sortedHistory.forEach(function(s) {
+        var rec = s.records.find(function(r) { return r.name === m.name; });
+        // Blank (not "A") when the member has no record for that session,
+        // matching how a brand-new member wouldn't have attended sessions
+        // that happened before they joined — mirrors the import's own
+        // "blank cell = skip, don't default to Absent" behavior.
+        row[s.date] = rec ? rec.status : "";
+      });
+      return row;
+    });
+
+    var ws = XLSX.utils.json_to_sheet(rows);
+    var cols = [{wch:30},{wch:22},{wch:28},{wch:16},{wch:12}];
+    sortedHistory.forEach(function() { cols.push({wch:12}); });
+    ws["!cols"] = cols;
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet2");
+    XLSX.writeFile(wb, "Reference_" + todayStr.replace(/ /g,"_") + ".xlsx");
+    toast_("Full reference file exported! (" + rows.length + " members, " + sortedHistory.length + " sessions)");
+  }
+
   // ── Excel Tab: Import Member Directory ──────────────────────────────────
   // Behaviour: FULL REPLACE — wipes all existing members and rebuilds
   // entirely from the Excel. Every row becomes a fresh registered member.
@@ -3671,12 +3782,62 @@ function App() {
           return;
         }
 
+        // ── Identify date columns ──────────────────────────────────────
+        // Everything that isn't one of the 5 known member-info columns is
+        // treated as a historic attendance date column (P/A per member).
+        // Headers can arrive in three shapes from this kind of export:
+        //   "16-02-2026"      -> already a clean DD-MM-YYYY string
+        //   "18-05-20262"     -> same, but with a stray trailing digit
+        //                        (typo) — we strip extra digits off the
+        //                        year rather than guess; if that still
+        //                        doesn't look like a valid date, the
+        //                        column is skipped rather than risking a
+        //                        wrong date silently entering history.
+        //   46174 (a number)  -> raw Excel date serial number, which
+        //                        SheetJS hands back as a numeric header
+        //                        when the source cell wasn't text-
+        //                        formatted. Converted via the standard
+        //                        Excel epoch (1899-12-30).
+        var KNOWN_COLS = { "Full Name": 1, "Followup": 1, "Reference": 1, "Contact": 1, "Category": 1 };
+        function excelSerialToDDMMYYYY(serial) {
+          var ms = (serial - 25569) * 86400 * 1000; // 25569 = days between 1899-12-30 and 1970-01-01
+          var d = new Date(ms);
+          var dd = String(d.getUTCDate()).padStart(2, "0");
+          var mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+          var yyyy = d.getUTCFullYear();
+          return dd + "-" + mm + "-" + yyyy;
+        }
+        function normalizeDateHeader(h) {
+          if (typeof h === "number") return excelSerialToDDMMYYYY(h);
+          var s = String(h).trim();
+          var m = s.match(/^(\d{2})-(\d{2})-(\d{4})(\d*)$/); // DD-MM-YYYY plus any stray trailing digits
+          if (m) return m[1] + "-" + m[2] + "-" + m[3];
+          return null; // not a recognizable date — column will be skipped
+        }
+        var dateColumns = []; // [{ header: original key, date: "DD-MM-YYYY" }]
+        Object.keys(first).forEach(function(key) {
+          if (KNOWN_COLS[key]) return;
+          var normalized = normalizeDateHeader(key);
+          if (normalized) dateColumns.push({ header: key, date: normalized });
+        });
+        // Sort chronologically so history[] reads in session order.
+        dateColumns.sort(function(a, b) {
+          var pa = a.date.split("-"), pb = b.date.split("-");
+          var da = new Date(+pa[2], +pa[1] - 1, +pa[0]);
+          var db = new Date(+pb[2], +pb[1] - 1, +pb[0]);
+          return da - db;
+        });
+
         var catMap = { "regular": "R", "irregular": "I", "no": "N" };
         var newMembers = [];
         var newCatOv   = {};
         var newRefOv   = {};
         var newFPOv    = {};
         var skipped    = 0;
+        // One bucket of records per recognized date column, built up as
+        // we walk each member row below.
+        var recordsByDate = {};
+        dateColumns.forEach(function(dc) { recordsByDate[dc.date] = []; });
 
         rows.forEach(function(row) {
           var name     = (row["Full Name"]  || "").toString().trim();
@@ -3700,18 +3861,52 @@ function App() {
           });
 
           if (catCode) newCatOv[name] = catCode;
+
+          // Build this member's attendance record for every recognized
+          // date column. Blank/unrecognized cells are skipped (not
+          // counted as Absent) so a partially-filled column doesn't
+          // silently mark everyone absent for that session.
+          dateColumns.forEach(function(dc) {
+            var raw = (row[dc.header] || "").toString().trim().toUpperCase();
+            if (raw !== "P" && raw !== "A") return;
+            recordsByDate[dc.date].push({
+              name: name,
+              followup: followup,
+              contact: contact,
+              status: raw,
+              time: "",
+              reason: ""
+            });
+          });
         });
+
+        // ── Build the new history[] entirely from the Excel file ────────
+        // This REPLACES existing history (per explicit confirmation) —
+        // any session data not present in this file is discarded.
+        var newHistory = dateColumns
+          .filter(function(dc) { return recordsByDate[dc.date].length > 0; })
+          .map(function(dc) {
+            return {
+              date: dc.date,
+              sabhaType: "Weekly",
+              note: "",
+              records: recordsByDate[dc.date],
+              submittedBy: currentUserEmail,
+              submittedAt: new Date().toISOString()
+            };
+          });
 
         // ── Wipe everything and replace ──────────────────────────────
         // 1. Suppress hardcoded MASTER array
         fsSet("shreeji_suppress_master", true);
         setSuppressMaster(true);
 
-        // 2. Clear ALL existing data (members, attendance, overrides)
+        // 2. Clear ALL existing data (members, attendance, overrides, history)
         fsSet(LS_MEMBERS, []);
         fsSet(LS_FP, {});
         fsSet(LS_CAT_OV, {});
         fsSet(LS_ATT, {});
+        fsSet(LS_HIST, []);
         fsSet("shreeji_ref_overrides", {});
 
         // 3. Wipe React state fully first, then apply new data
@@ -3720,19 +3915,23 @@ function App() {
         setFPOverrides({});
         setReferenceOverrides({});
         setCatOverrides({});
+        setHistory([]);
 
-        // 4. Save and apply new member list
+        // 4. Save and apply new member list, categories, and history
         saveMembers(newMembers);
         saveCatOv(newCatOv);
+        saveHist(newHistory);
 
         setExtraMembers(newMembers);
         setCatOverrides(newCatOv);
+        setHistory(newHistory);
 
         var msg = newMembers.length + " member(s) imported fresh.";
+        if (dateColumns.length > 0) msg += " " + newHistory.length + " historic session(s) loaded.";
         if (skipped > 0) msg += " " + skipped + " row(s) skipped (blank name or missing Followup).";
 
         setExcelImportStatus({ type: "success", msg: msg, created: newMembers.length, updated: 0, skipped: skipped });
-        toast_("Import complete! " + newMembers.length + " members loaded.");
+        toast_("Import complete! " + newMembers.length + " members, " + newHistory.length + " sessions loaded.");
       } catch(err) {
         toast_("Import failed: " + err.message, "error");
         setExcelImportStatus({ type: "error", msg: "Parse error: " + err.message });
@@ -8546,7 +8745,12 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
         className:"btn btn-green",
         onClick: genMemberExcel,
         style:{display:"inline-flex",alignItems:"center",gap:7,padding:"10px 22px",fontSize:14,fontWeight:700}
-      }, "📥 Download Excel")
+      }, "📥 Download Excel"),
+      /*#__PURE__*/React.createElement("button", {
+        className:"btn btn-blue",
+        onClick: genFullReferenceExcel,
+        style:{display:"inline-flex",alignItems:"center",gap:7,padding:"10px 22px",fontSize:14,fontWeight:700,marginLeft:10}
+      }, "📊 Download Full Reference File (+ History)")
     ),
 
     /*#__PURE__*/React.createElement("div", {className:"card",style:{padding:20,marginBottom:16}},
@@ -8554,7 +8758,9 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
       /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#777",marginBottom:10}},
         "Upload an Excel file — every row becomes the member list. ",
         /*#__PURE__*/React.createElement("strong", null, "Completely replaces all existing members with exactly what is in the file."),
-        " Historic attendance data is never changed."
+        " If the file also has date columns (one per session, P/A per member), ",
+        /*#__PURE__*/React.createElement("strong", null, "Historic data is replaced too"),
+        " — anything not in the file is discarded."
       ),
       /*#__PURE__*/React.createElement("div", {style:{background:"#f8f8f4",border:"1px solid #e5e5e0",borderRadius:8,padding:"12px 16px",marginBottom:14,fontSize:12,color:"#555"}},
         /*#__PURE__*/React.createElement("div", {style:{fontWeight:600,marginBottom:4,color:"#1a1a1a"}}, "📋 Required columns in Excel:"),
@@ -8568,6 +8774,9 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
         ),
         /*#__PURE__*/React.createElement("div", {style:{marginTop:8,fontSize:11,color:"#888"}},
           "Category values: ", /*#__PURE__*/React.createElement("strong",null,"Regular"), " · ", /*#__PURE__*/React.createElement("strong",null,"Irregular"), " · ", /*#__PURE__*/React.createElement("strong",null,"No"), " — leave blank to auto-calculate from attendance history."
+        ),
+        /*#__PURE__*/React.createElement("div", {style:{marginTop:6,fontSize:11,color:"#888"}},
+          "Optional: any extra columns headed with a date (e.g. ", /*#__PURE__*/React.createElement("code",null,"16-02-2026"), ") are read as historic sessions — P/A per member, one column per session."
         )
       ),
       /*#__PURE__*/React.createElement("input", {
@@ -8776,7 +8985,79 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
       style: {padding:"4px 10px",borderRadius:7,border:"1px solid #ddd",fontSize:13}
     }),
     /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:"#aaa"}}, "Arrivals after this time show \u23f0 Late badge")
-  ), /*#__PURE__*/React.createElement("div", {
+  ),
+  /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: { padding: 20, marginBottom: 14 }
+  },
+    /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 14, marginBottom: 6 } }, "🏷️ Category Criteria"),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#777", marginBottom: 14 } },
+      "Defines how every Yuvak gets labeled ", /*#__PURE__*/React.createElement("strong", null, "Regular"), ", ",
+      /*#__PURE__*/React.createElement("strong", null, "Irregular"), ", or ", /*#__PURE__*/React.createElement("strong", null, "No"),
+      " — unless a manual override is set on that member's profile."
+    ),
+
+    // Regular criteria
+    /*#__PURE__*/React.createElement("div", {
+      style: { background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "12px 16px", marginBottom: 10 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#15803d", marginBottom: 8 } }, "✅ Regular"),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13 } },
+        "Present at least",
+        /*#__PURE__*/React.createElement("input", {
+          type: "number", min: 1, value: catCriteria.regularMin,
+          onChange: e => updateCatCriteria("regularMin", e.target.value),
+          style: { width: 56, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", textAlign: "center" }
+        }),
+        "time(s) in the last",
+        /*#__PURE__*/React.createElement("input", {
+          type: "number", min: 1, value: catCriteria.regularWindow,
+          onChange: e => updateCatCriteria("regularWindow", e.target.value),
+          style: { width: 56, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", textAlign: "center" }
+        }),
+        "session(s)."
+      )
+    ),
+
+    // Irregular criteria
+    /*#__PURE__*/React.createElement("div", {
+      style: { background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "12px 16px", marginBottom: 10 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#92400e", marginBottom: 8 } }, "⚠️ Irregular"),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13 } },
+        "Otherwise, present at least",
+        /*#__PURE__*/React.createElement("input", {
+          type: "number", min: 1, value: catCriteria.irregularMin,
+          onChange: e => updateCatCriteria("irregularMin", e.target.value),
+          style: { width: 56, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", textAlign: "center" }
+        }),
+        "time(s) in the last",
+        /*#__PURE__*/React.createElement("input", {
+          type: "number", min: 1, value: catCriteria.irregularWindow,
+          onChange: e => updateCatCriteria("irregularWindow", e.target.value),
+          style: { width: 56, padding: "5px 8px", borderRadius: 6, border: "1px solid #ddd", textAlign: "center" }
+        }),
+        "session(s)."
+      )
+    ),
+
+    // No criteria (always the fallback, not editable as numbers — explained instead)
+    /*#__PURE__*/React.createElement("div", {
+      style: { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px 16px", marginBottom: 14 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: "#6b7280", marginBottom: 4 } }, "⬜ No"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12.5, color: "#6b7280" } },
+        "Anyone who doesn't meet either rule above — this is the fallback, so there's nothing extra to set."
+      )
+    ),
+
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-gray",
+      onClick: resetCatCriteria,
+      style: { fontSize: 12.5, padding: "7px 16px" }
+    }, "↺ Reset to defaults (4/1 · 6/1)")
+  ),
+  /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 20,
