@@ -1716,6 +1716,7 @@ function App() {
   function saveRefOverrides(obj) { fsSet(LS_REFOV, obj); }
   // ── Excel import state
   const [excelImportStatus, setExcelImportStatus] = useState(null);
+  const [importPreview, setImportPreview] = useState(null);
   const excelImportRef = useRef(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   // When true, MASTER hardcoded members are hidden (used after "Delete All Data")
@@ -3850,19 +3851,6 @@ function App() {
         // ── Identify date columns ──────────────────────────────────────
         // Everything that isn't one of the 5 known member-info columns is
         // treated as a historic attendance date column (P/A per member).
-        // Headers can arrive in three shapes from this kind of export:
-        //   "16-02-2026"      -> already a clean DD-MM-YYYY string
-        //   "18-05-20262"     -> same, but with a stray trailing digit
-        //                        (typo) — we strip extra digits off the
-        //                        year rather than guess; if that still
-        //                        doesn't look like a valid date, the
-        //                        column is skipped rather than risking a
-        //                        wrong date silently entering history.
-        //   46174 (a number)  -> raw Excel date serial number, which
-        //                        SheetJS hands back as a numeric header
-        //                        when the source cell wasn't text-
-        //                        formatted. Converted via the standard
-        //                        Excel epoch (1899-12-30).
         var KNOWN_COLS = { "Full Name": 1, "Followup": 1, "Reference": 1, "Contact": 1, "Category": 1 };
         function excelSerialToDDMMYYYY(serial) {
           var ms = (serial - 25569) * 86400 * 1000; // 25569 = days between 1899-12-30 and 1970-01-01
@@ -3902,10 +3890,17 @@ function App() {
           return null; // not a recognizable date — column will be skipped
         }
         var dateColumns = []; // [{ header: original key, date: "DD-MM-YYYY" }]
+        var rejectedColumns = []; // headers that LOOK date-ish but didn't parse — surfaced in the preview so a silently-skipped column is never discovered weeks later
+        function looksDateIsh(key) {
+          if (typeof key === "number") return true;
+          var s = String(key);
+          return /\d/.test(s) && (s.indexOf("-") !== -1 || s.indexOf("/") !== -1 || /^\d+$/.test(s));
+        }
         Object.keys(first).forEach(function(key) {
           if (KNOWN_COLS[key]) return;
           var normalized = normalizeDateHeader(key);
           if (normalized) dateColumns.push({ header: key, date: normalized });
+          else if (looksDateIsh(key)) rejectedColumns.push(key);
         });
         // Sort chronologically so history[] reads in session order.
         dateColumns.sort(function(a, b) {
@@ -3983,42 +3978,59 @@ function App() {
             };
           });
 
-        // ── Wipe everything and replace, in ONE atomic Firestore write ──
-        // Previously this issued 8 separate fsSet() calls in a row (clear
-        // members, clear history, ... then save the new history). Each is
-        // an independent unawaited network request, so there was no
-        // guarantee they'd arrive at Firestore in the order they were
-        // sent — the "clear history" request could arrive AFTER the "save
-        // new history" request and silently wipe the freshly-imported
-        // data. Bundling everything into one fsSetMany() call removes the
-        // race entirely: there's only one request, so nothing can overtake
-        // it.
-        fsSetMany({
-          "shreeji_suppress_master": true,
-          [LS_MEMBERS]: newMembers,
-          [LS_FP]: {},
-          [LS_CAT_OV]: newCatOv,
-          [LS_ATT]: {},
-          [LS_HIST]: newHistory,
-          "shreeji_ref_overrides": {}
+        // ── Cross-check new names against existing members ──────────────
+        // Flags names that are CLOSE to an existing member (same once you
+        // ignore case/extra spaces, or only 1-2 characters different) but
+        // not an exact match — exactly the kind of typo/spelling variant
+        // that has silently created duplicate members before. This never
+        // auto-merges anything; it only surfaces the warning so an admin
+        // can decide.
+        function normalizeForCompare(s) { return s.toLowerCase().replace(/\s+/g, " ").trim(); }
+        function levenshtein(a, b) {
+          if (a === b) return 0;
+          var m = a.length, n = b.length;
+          if (m === 0) return n; if (n === 0) return m;
+          var prev = Array.from({length: n + 1}, function(_, i) { return i; });
+          for (var i = 1; i <= m; i++) {
+            var cur = [i];
+            for (var j = 1; j <= n; j++) {
+              cur[j] = a[i-1] === b[j-1] ? prev[j-1] : 1 + Math.min(prev[j], cur[j-1], prev[j-1]);
+            }
+            prev = cur;
+          }
+          return prev[n];
+        }
+        var existingNames = allMembers.map(function(m) { return m.name; });
+        var possibleDuplicates = [];
+        newMembers.forEach(function(nm) {
+          if (existingNames.indexOf(nm.name) !== -1) return; // exact match, not a duplicate concern
+          var normNew = normalizeForCompare(nm.name);
+          existingNames.forEach(function(existing) {
+            if (existing === nm.name) return;
+            var normExisting = normalizeForCompare(existing);
+            var isWhitespaceCaseMatch = normNew === normExisting;
+            var dist = levenshtein(normNew, normExisting);
+            var isCloseTypo = !isWhitespaceCaseMatch && dist > 0 && dist <= 2 && Math.min(normNew.length, normExisting.length) > 8;
+            if (isWhitespaceCaseMatch || isCloseTypo) {
+              possibleDuplicates.push({ excelName: nm.name, existingName: existing, reason: isWhitespaceCaseMatch ? "spacing/case" : "similar spelling" });
+            }
+          });
         });
 
-        // React state mirrors the write above exactly, so the screen
-        // reflects the new data immediately without waiting on Firestore.
-        setSuppressMaster(true);
-        setAttendance({});
-        setFPOverrides({});
-        setReferenceOverrides({});
-        setExtraMembers(newMembers);
-        setCatOverrides(newCatOv);
-        setHistory(newHistory);
-
-        var msg = newMembers.length + " member(s) imported fresh.";
-        if (dateColumns.length > 0) msg += " " + newHistory.length + " historic session(s) loaded.";
-        if (skipped > 0) msg += " " + skipped + " row(s) skipped (blank name or missing Followup).";
-
-        setExcelImportStatus({ type: "success", msg: msg, created: newMembers.length, updated: 0, skipped: skipped });
-        toast_("Import complete! " + newMembers.length + " members, " + newHistory.length + " sessions loaded.");
+        // ── Show preview instead of writing immediately ─────────────────
+        // The admin reviews exactly what was detected (and what was
+        // rejected) before anything touches the shared Firestore document.
+        setImportPreview({
+          fileName: file.name,
+          totalRows: rows.length,
+          newMembers: newMembers,
+          newCatOv: newCatOv,
+          newHistory: newHistory,
+          dateColumns: dateColumns,
+          rejectedColumns: rejectedColumns,
+          possibleDuplicates: possibleDuplicates,
+          skipped: skipped
+        });
       } catch(err) {
         toast_("Import failed: " + err.message, "error");
         setExcelImportStatus({ type: "error", msg: "Parse error: " + err.message });
@@ -4026,6 +4038,45 @@ function App() {
     };
     reader.readAsArrayBuffer(file);
     e.target.value = "";
+  }
+
+  // Called only from the import preview modal's "Confirm Import" button —
+  // this is the ONLY place that actually writes the parsed data to the
+  // shared Firestore document.
+  function commitImport() {
+    if (!requireAdmin() || !importPreview) return;
+    var p = importPreview;
+
+    // ── Wipe everything and replace, in ONE atomic Firestore write ──
+    // Bundled into a single fsSetMany() call so there's no possibility
+    // of one write arriving at Firestore's servers out of order relative
+    // to another (see fsSetMany's definition for the full history of why
+    // this matters).
+    fsSetMany({
+      "shreeji_suppress_master": true,
+      [LS_MEMBERS]: p.newMembers,
+      [LS_FP]: {},
+      [LS_CAT_OV]: p.newCatOv,
+      [LS_ATT]: {},
+      [LS_HIST]: p.newHistory,
+      "shreeji_ref_overrides": {}
+    });
+
+    setSuppressMaster(true);
+    setAttendance({});
+    setFPOverrides({});
+    setReferenceOverrides({});
+    setExtraMembers(p.newMembers);
+    setCatOverrides(p.newCatOv);
+    setHistory(p.newHistory);
+
+    var msg = p.newMembers.length + " member(s) imported fresh.";
+    if (p.dateColumns.length > 0) msg += " " + p.newHistory.length + " historic session(s) loaded.";
+    if (p.skipped > 0) msg += " " + p.skipped + " row(s) skipped (blank name or missing Followup).";
+
+    setExcelImportStatus({ type: "success", msg: msg, created: p.newMembers.length, updated: 0, skipped: p.skipped });
+    toast_("Import complete! " + p.newMembers.length + " members, " + p.newHistory.length + " sessions loaded.");
+    setImportPreview(null);
   }
 
   // All 15 tabs exist, but non-admins (view-only access) don't get tabs whose
@@ -9203,6 +9254,94 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:10,justifyContent:"flex-end"}},
       /*#__PURE__*/React.createElement("button", {className:"btn btn-gray", onClick: function(){ setShowDeleteAll(false); }}, "Cancel"),
       /*#__PURE__*/React.createElement("button", {className:"btn btn-red", style:{fontWeight:700}, onClick: doDeleteAll}, "Yes, Delete Everything")
+    )
+  )), importPreview && /*#__PURE__*/React.createElement("div", {
+    className:"modal-bg",
+    onClick: function(){ setImportPreview(null); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className:"modal",
+    style:{maxWidth:560, maxHeight:"85vh", overflowY:"auto"},
+    onClick: function(e){ e.stopPropagation(); }
+  },
+    /*#__PURE__*/React.createElement("div", {style:{marginBottom:14}},
+      /*#__PURE__*/React.createElement("div", {style:{fontSize:32,marginBottom:6}}, "🔍"),
+      /*#__PURE__*/React.createElement("h2", {style:{margin:"0 0 4px",fontSize:17}}, "Review before importing"),
+      /*#__PURE__*/React.createElement("p", {style:{fontSize:12.5,color:"#777",margin:0}},
+        "Nothing has been saved yet. Check this matches what you expect, then confirm."
+      )
+    ),
+
+    /*#__PURE__*/React.createElement("div", {style:{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"12px 16px",marginBottom:12,fontSize:13}},
+      /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",marginBottom:6}},
+        /*#__PURE__*/React.createElement("span", null, "📄 File"),
+        /*#__PURE__*/React.createElement("strong", null, importPreview.fileName)
+      ),
+      /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",marginBottom:6}},
+        /*#__PURE__*/React.createElement("span", null, "👤 Members detected"),
+        /*#__PURE__*/React.createElement("strong", null, importPreview.newMembers.length, " of ", importPreview.totalRows, " row(s)")
+      ),
+      /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between"}},
+        /*#__PURE__*/React.createElement("span", null, "📅 Session dates detected"),
+        /*#__PURE__*/React.createElement("strong", {style:{color: importPreview.dateColumns.length > 0 ? "#15803d" : "#888"}},
+          importPreview.dateColumns.length
+        )
+      ),
+      importPreview.skipped > 0 && /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",marginTop:6,color:"#b45309"}},
+        /*#__PURE__*/React.createElement("span", null, "⚠️ Rows skipped"),
+        /*#__PURE__*/React.createElement("strong", null, importPreview.skipped, " (blank name or Followup)")
+      )
+    ),
+
+    importPreview.dateColumns.length > 0 && /*#__PURE__*/React.createElement("div", {style:{marginBottom:12}},
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:600,fontSize:12.5,marginBottom:6}}, "Dates that will become Historic sessions:"),
+      /*#__PURE__*/React.createElement("div", {style:{display:"flex",flexWrap:"wrap",gap:6}},
+        importPreview.dateColumns.map(function(dc){
+          return /*#__PURE__*/React.createElement("span", {
+            key:dc.date,
+            style:{fontSize:11,padding:"4px 9px",borderRadius:20,background:"#dcfce7",color:"#15803d",fontWeight:600}
+          }, dc.date);
+        })
+      )
+    ),
+
+    importPreview.rejectedColumns.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style:{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:10,padding:"12px 16px",marginBottom:12}
+    },
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:12.5,color:"#b91c1c",marginBottom:6}},
+        "🚫 ", importPreview.rejectedColumns.length, " column(s) look like dates but couldn't be read — these will be SKIPPED:"
+      ),
+      /*#__PURE__*/React.createElement("div", {style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
+        importPreview.rejectedColumns.map(function(rc, i){
+          return /*#__PURE__*/React.createElement("span", {
+            key:i,
+            style:{fontSize:11,padding:"4px 9px",borderRadius:20,background:"#fee2e2",color:"#991b1b",fontWeight:600}
+          }, String(rc));
+        })
+      ),
+      /*#__PURE__*/React.createElement("div", {style:{fontSize:11.5,color:"#7f1d1d"}},
+        "If any of these should be a session date, fix the column header in the Excel file (e.g. \"16-02-2026\") and re-upload."
+      )
+    ),
+
+    importPreview.possibleDuplicates.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style:{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"12px 16px",marginBottom:12}
+    },
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:12.5,color:"#92400e",marginBottom:6}},
+        "⚠️ ", importPreview.possibleDuplicates.length, " name(s) look similar to an existing member — likely the SAME person, will import as a SEPARATE new member:"
+      ),
+      /*#__PURE__*/React.createElement("div", {style:{fontSize:11.5,color:"#78350f",lineHeight:1.8}},
+        importPreview.possibleDuplicates.slice(0,8).map(function(d, i){
+          return /*#__PURE__*/React.createElement("div", {key:i},
+            "\"", d.excelName, "\" vs \"", d.existingName, "\" (", d.reason, ")"
+          );
+        }),
+        importPreview.possibleDuplicates.length > 8 && /*#__PURE__*/React.createElement("div", null, "...and ", importPreview.possibleDuplicates.length - 8, " more")
+      )
+    ),
+
+    /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:10,justifyContent:"flex-end",marginTop:16}},
+      /*#__PURE__*/React.createElement("button", {className:"btn btn-gray", onClick: function(){ setImportPreview(null); }}, "Cancel"),
+      /*#__PURE__*/React.createElement("button", {className:"btn btn-green", style:{fontWeight:700}, onClick: commitImport}, "✓ Confirm Import")
     )
   )), profileMember && (() => {
     const pd = getProfileData(profileMember);
