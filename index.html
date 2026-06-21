@@ -78,8 +78,10 @@
       // only, since getRedirectResult() has known inconsistencies across
       // browsers when called in isolation. Errors here are surfaced the
       // same way as any other sign-in error.
-      getRedirectResult(auth).catch(err => {
-        console.error("Redirect sign-in result error:", err);
+      getRedirectResult(auth).then(result => {
+        console.log("[ShreejiAuth] getRedirectResult resolved. User present:", !!(result && result.user));
+      }).catch(err => {
+        console.error("[ShreejiAuth] Redirect sign-in result error:", err.code || err.message || err);
         window.dispatchEvent(new CustomEvent("shreeji-auth-error", { detail: err.message || String(err) }));
       });
 
@@ -106,6 +108,7 @@
           window.dispatchEvent(new CustomEvent("shreeji-firestore-error", { detail: err.message || String(err) }));
         })
       };
+      console.log("[ShreejiAuth] Firebase module initialized OK.");
       window.dispatchEvent(new CustomEvent("shreeji-firebase-ready"));
     } catch (err) {
       console.error("Firebase initialization failed:", err);
@@ -9688,6 +9691,24 @@ function AuthGate() {
   const [pendingSync, setPendingSync] = useState(false);
   const hasLoadedOnceRef = useRef(false);
   const autoSignInTriggeredRef = useRef(false);
+  const [loadingStuck, setLoadingStuck] = useState(false);
+
+  // Diagnostic + safety net: if fbReady/authChecked don't resolve within
+  // 8 seconds of mount, something is hanging (commonly: returning from a
+  // signInWithRedirect trip on a browser that partitions third-party
+  // storage, where Firebase's auth-state listener can fail to pick up
+  // the redirect result). Logs exactly what's known at that point, and
+  // flips loadingStuck so the screen can offer an actual way out instead
+  // of spinning forever.
+  useEffect(function () {
+    var t = setTimeout(function () {
+      if (!fbReady || !authChecked) {
+        console.warn("[ShreejiAuth] Stuck loading after 8s — fbReady:", fbReady, "authChecked:", authChecked, "window.ShreejiFirebase present:", !!window.ShreejiFirebase);
+        setLoadingStuck(true);
+      }
+    }, 8000);
+    return function () { clearTimeout(t); };
+  }, [fbReady, authChecked]);
 
   // ── Phone + password gate (sits IN FRONT of Google Sign-In) ──────────
   // IMPORTANT: this is a UI-level pre-filter only. It does NOT grant admin
@@ -9801,6 +9822,7 @@ function AuthGate() {
   useEffect(function () {
     if (!fbReady) return;
     const unsub = window.ShreejiFirebase.onAuthChange(function (u) {
+      console.log("[ShreejiAuth] onAuthStateChanged fired. User:", u ? u.email : null);
       // If we previously had a signed-in user and now don't, this is a
       // real sign-out (not just the initial "haven't checked yet" state)
       // — reset the gate so the person lands back on the phone+password
@@ -9939,7 +9961,25 @@ function AuthGate() {
 
   if (!fbReady || !authChecked) {
     return /*#__PURE__*/React.createElement("div", { style: screenStyle },
-      /*#__PURE__*/React.createElement("div", { style: Object.assign({}, cardStyle, { color: "#475569" }) }, "Loading…")
+      /*#__PURE__*/React.createElement("div", { style: Object.assign({}, cardStyle, { color: "#475569" }) },
+        "Loading…",
+        loadingStuck && /*#__PURE__*/React.createElement("div", { style: { marginTop: 16, textAlign: "left" } },
+          /*#__PURE__*/React.createElement("div", {
+            style: { background: "#fef3c7", color: "#92400e", borderRadius: 10, padding: "10px 12px", fontSize: 12, marginBottom: 12 }
+          },
+            "This is taking longer than expected. (fbReady: ", String(fbReady), ", authChecked: ", String(authChecked), ")",
+            /*#__PURE__*/React.createElement("br", null),
+            "This can happen after returning from Google sign-in on some browsers."
+          ),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: function () { window.location.reload(); },
+            style: {
+              width: "100%", padding: "11px 16px", borderRadius: 12, border: "none",
+              background: "#2563eb", color: "#fff", fontSize: 13.5, fontWeight: 700, cursor: "pointer"
+            }
+          }, "Reload page")
+        )
+      )
     );
   }
 
