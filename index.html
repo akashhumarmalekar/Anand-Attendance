@@ -9794,15 +9794,40 @@ function AuthGate() {
   }, [isOffline, pendingSync]);
 
   // Wait for the Firebase module script (top of <head>) to finish loading.
+  // IMPORTANT: the module script runs in <head>, well before React even
+  // loads (React is a separate, large inline <script> further down the
+  // page) — so by the time THIS effect actually attaches its listener,
+  // the module script has very likely ALREADY dispatched
+  // "shreeji-firebase-ready" and finished. An event dispatched before
+  // anyone is listening for it is simply lost — there's no replay. That
+  // was the actual bug: fbReady would wait forever for an event that had
+  // already fired. The fix is to re-check window.ShreejiFirebase directly
+  // the moment this effect runs (not just react to the event), and ALSO
+  // poll briefly afterward as a second safety net, since on some browsers
+  // even the synchronous check can land in a one-tick gap while the
+  // module script's try block is still mid-execution.
   useEffect(function () {
     if (fbReady) return;
+    if (window.ShreejiFirebase) { setFbReady(true); return; }
+    if (window.__shreejiConfigMissing) { setConfigMissing(true); return; }
     function onReady() { setFbReady(true); }
     function onConfigMissing() { setConfigMissing(true); }
     window.addEventListener("shreeji-firebase-ready", onReady);
     window.addEventListener("shreeji-config-missing", onConfigMissing);
+    // Safety net: poll for up to ~3 seconds in case the module script is
+    // still mid-execution when this effect first runs. Cheap and self-
+    // cancelling — clears the moment fbReady flips true via any path.
+    var pollCount = 0;
+    var pollId = setInterval(function () {
+      pollCount++;
+      if (window.ShreejiFirebase) { setFbReady(true); clearInterval(pollId); }
+      else if (window.__shreejiConfigMissing) { setConfigMissing(true); clearInterval(pollId); }
+      else if (pollCount > 30) { clearInterval(pollId); } // ~3s at 100ms intervals
+    }, 100);
     return function () {
       window.removeEventListener("shreeji-firebase-ready", onReady);
       window.removeEventListener("shreeji-config-missing", onConfigMissing);
+      clearInterval(pollId);
     };
   }, [fbReady]);
 
