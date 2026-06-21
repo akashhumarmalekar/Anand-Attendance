@@ -4207,6 +4207,7 @@ function App() {
         className:"navbar-btn",
         onClick:function(){
           if(window.confirm("Sign out of "+(window.ShreejiCurrentUser.email||"Google")+"?")){
+            try { sessionStorage.removeItem("shreeji_gate_unlocked"); } catch(e3) {}
             window.ShreejiFirebase&&window.ShreejiFirebase.signOutUser();
           }
         },
@@ -9671,6 +9672,40 @@ function AuthGate() {
   const [pendingSync, setPendingSync] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
+  // ── Phone + password gate (sits IN FRONT of Google Sign-In) ──────────
+  // IMPORTANT: this is a UI-level pre-filter only. It does NOT grant admin
+  // rights by itself — Firestore's security rules are still the real
+  // authority and only check the signed-in Google account against
+  // ADMIN_EMAILS. A correct regular-password entry just means "you may
+  // proceed to Google Sign-In as a viewer" — exactly like today, nothing
+  // here can write data that ADMIN_EMAILS wouldn't already allow.
+  // Passwords live in plain sight in this file (anyone with the URL can
+  // view source and read them) — this gate is a speed bump, not a lock.
+  const GATE_ADMIN_PASSWORD = "Akshar@2026";
+  const GATE_VIEWER_PASSWORD = "Akshar@369";
+  const [gateUnlocked, setGateUnlocked] = useState(function () {
+    try { return sessionStorage.getItem("shreeji_gate_unlocked") === "1"; } catch (e) { return false; }
+  });
+  const [gatePhone, setGatePhone] = useState("");
+  const [gatePassword, setGatePassword] = useState("");
+  const [gateError, setGateError] = useState("");
+  function handleGateSubmit(e) {
+    e.preventDefault();
+    var phone = gatePhone.trim();
+    if (!/^\d{10}$/.test(phone)) {
+      setGateError("Enter a valid 10-digit phone number.");
+      return;
+    }
+    if (gatePassword === GATE_ADMIN_PASSWORD || gatePassword === GATE_VIEWER_PASSWORD) {
+      setGateError("");
+      setGatePassword("");
+      setGateUnlocked(true);
+      try { sessionStorage.setItem("shreeji_gate_unlocked", "1"); } catch (e2) {}
+    } else {
+      setGateError("Incorrect password.");
+    }
+  }
+
   // ── Offline detection ────────────────────────────────────────────────
   // Two signals, since either alone misses real cases:
   //  1. navigator.onLine — catches "no internet connection at all"
@@ -9855,6 +9890,46 @@ function AuthGate() {
   if (!fbReady || !authChecked) {
     return /*#__PURE__*/React.createElement("div", { style: screenStyle },
       /*#__PURE__*/React.createElement("div", { style: Object.assign({}, cardStyle, { color: "#475569" }) }, "Loading…")
+    );
+  }
+
+  // ── Phone + password gate (in front of Google Sign-In) ──────────────
+  if (!gateUnlocked) {
+    return /*#__PURE__*/React.createElement("div", { style: screenStyle },
+      /*#__PURE__*/React.createElement("form", { style: cardStyle, onSubmit: handleGateSubmit },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 40, marginBottom: 10 } }, "🔐"),
+        /*#__PURE__*/React.createElement("h2", { style: { margin: "0 0 6px", color: "#0f172a" } }, "Akshar Anand Attendance"),
+        /*#__PURE__*/React.createElement("p", { style: { color: "#64748b", fontSize: 13.5, marginBottom: 20 } },
+          "Enter your phone number and password to continue."),
+        gateError && /*#__PURE__*/React.createElement("div", {
+          style: { background: "#fee2e2", color: "#991b1b", borderRadius: 10, padding: "8px 12px", fontSize: 12.5, marginBottom: 14, textAlign: "left" }
+        }, gateError),
+        /*#__PURE__*/React.createElement("input", {
+          type: "tel", inputMode: "numeric", placeholder: "Phone number",
+          value: gatePhone,
+          onChange: function (e) { setGatePhone(e.target.value.replace(/\D/g, "").slice(0, 10)); },
+          style: {
+            width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #e2e8f0",
+            fontSize: 14, marginBottom: 10, boxSizing: "border-box"
+          }
+        }),
+        /*#__PURE__*/React.createElement("input", {
+          type: "password", placeholder: "Password",
+          value: gatePassword,
+          onChange: function (e) { setGatePassword(e.target.value); },
+          style: {
+            width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #e2e8f0",
+            fontSize: 14, marginBottom: 16, boxSizing: "border-box"
+          }
+        }),
+        /*#__PURE__*/React.createElement("button", {
+          type: "submit",
+          style: {
+            width: "100%", padding: "12px 16px", borderRadius: 12, border: "none",
+            background: "#2563eb", color: "#fff", fontSize: 14.5, fontWeight: 700, cursor: "pointer"
+          }
+        }, "Continue")
+      )
     );
   }
 
