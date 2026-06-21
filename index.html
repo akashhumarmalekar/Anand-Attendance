@@ -3872,11 +3872,33 @@ function App() {
           var yyyy = d.getUTCFullYear();
           return dd + "-" + mm + "-" + yyyy;
         }
+        // Handles every header shape SheetJS has been observed to produce
+        // for a date column, since which shape shows up depends on how
+        // the SOURCE cell happens to be formatted in Excel — not on the
+        // underlying date itself:
+        //   "16-02-2026"   -> already DD-MM-YYYY text
+        //   "18-05-20262"  -> same, with a stray trailing digit (typo) —
+        //                     stripped rather than guessed at
+        //   46174          -> raw Excel serial number (cell had NO date
+        //                     display format applied)
+        //   "6/1/26"       -> short-date display text, M/D/YY (cell DID
+        //                     have a date format applied) — note this is
+        //                     MONTH-first, unlike every other format here
+        //   "6/1/2026"     -> same, 4-digit year variant, handled for
+        //                     safety even though not seen in practice yet
         function normalizeDateHeader(h) {
           if (typeof h === "number") return excelSerialToDDMMYYYY(h);
           var s = String(h).trim();
           var m = s.match(/^(\d{2})-(\d{2})-(\d{4})(\d*)$/); // DD-MM-YYYY plus any stray trailing digits
           if (m) return m[1] + "-" + m[2] + "-" + m[3];
+          var m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/); // M/D/YY or M/D/YYYY
+          if (m2) {
+            var mo = parseInt(m2[1], 10), da = parseInt(m2[2], 10), yr = parseInt(m2[3], 10);
+            if (m2[3].length === 2) yr = yr <= 79 ? 2000 + yr : 1900 + yr; // 00-79 -> 2000s, 80-99 -> 1900s
+            if (mo >= 1 && mo <= 12 && da >= 1 && da <= 31) {
+              return String(da).padStart(2, "0") + "-" + String(mo).padStart(2, "0") + "-" + yr;
+            }
+          }
           return null; // not a recognizable date — column will be skipped
         }
         var dateColumns = []; // [{ header: original key, date: "DD-MM-YYYY" }]
@@ -7994,7 +8016,51 @@ function App() {
       color: darkMode ? "#94a3b8" : "#666",
       marginBottom: 16
     }
-  }, "Yuvaks who dropped category or missed 3+ consecutive sessions. Assign personal follow-up calls immediately."), actionList.length === 0 && /*#__PURE__*/React.createElement("div", {
+  }, "Yuvaks who dropped category or missed 3+ consecutive sessions. Assign personal follow-up calls immediately."),
+  regBecomingIrr.length > 0 && /*#__PURE__*/React.createElement("div", {style:{marginBottom:16}},
+    /*#__PURE__*/React.createElement("div", {style:{fontWeight:600,fontSize:13,marginBottom:6,color:"#b45309"}},
+      "\uD83D\uDCC9 Regular \u2192 Irregular Risk (", regBecomingIrr.length, ")"
+    ),
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:11.5,color:"#92400e",marginBottom:8}},
+      "These Regular yuvaks attended only 1 of last 4 sessions and were absent in the last 2. At risk of becoming Irregular."
+    ),
+    /*#__PURE__*/React.createElement("div", {className:"card",style:{overflow:"hidden"}},
+      /*#__PURE__*/React.createElement("div", {style:{display:"flex",padding:"8px 14px",background:"#fffbeb",fontSize:10,fontWeight:700,color:"#92400e",textTransform:"uppercase",borderBottom:"1px solid #fde68a"}},
+        /*#__PURE__*/React.createElement("span", {style:{flex:1}}, "Member"),
+        /*#__PURE__*/React.createElement("span", {style:{width:120,textAlign:"center"}}, "Last 4 Sessions"),
+        /*#__PURE__*/React.createElement("span", {style:{width:90,textAlign:"center"}}, "Action")
+      ),
+      regBecomingIrr.map(function(m) {
+        return /*#__PURE__*/React.createElement("div", {key:m.name, style:{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid #fef9e7"}},
+          /*#__PURE__*/React.createElement("div", {style:{flex:1}},
+            /*#__PURE__*/React.createElement("div", {style:{fontWeight:600,fontSize:13}}, m.name),
+            /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:"#888"}}, m.followup)
+          ),
+          /*#__PURE__*/React.createElement("div", {style:{width:120,display:"flex",gap:4,justifyContent:"center"}},
+            m.last4.map(function(s, idx) {
+              return /*#__PURE__*/React.createElement("span", {
+                key:idx,
+                style:{
+                  width:22, height:22, borderRadius:5, display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:11, fontWeight:700,
+                  background: s === "P" ? "#dcfce7" : "#fee2e2",
+                  color: s === "P" ? "#15803d" : "#b91c1c"
+                }
+              }, s);
+            })
+          ),
+          /*#__PURE__*/React.createElement("div", {style:{width:90,textAlign:"center"}},
+            /*#__PURE__*/React.createElement("button", {
+              className:"btn btn-gray",
+              style:{fontSize:11,padding:"4px 10px"},
+              onClick: function(){ setProfileMember(m.name); }
+            }, "\uD83D\uDCAC Follow Up")
+          )
+        );
+      })
+    )
+  ),
+  actionList.length === 0 && /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 40,
