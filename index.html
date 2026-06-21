@@ -1679,7 +1679,7 @@ function App() {
   const swipeRef = useRef(null);
   const swipeStartX = useRef(null);
   const [timeEditName, setTimeEditName] = useState(null); // which member's time is being edited
-  const TAB_ORDER = ["dashboard", "panel", "report", "history", "monthly", "predict", "action", "alerts", "restructure", "yoy", "register", "edit", "profiles", "excel", "settings"];
+  const TAB_ORDER = ["dashboard", "panel", "report", "history", "monthly", "action", "restructure", "followupscore", "yoy", "register", "edit", "profiles", "excel", "settings"];
 
   // ── Followup Restructuring state
   const [fpExpanded, setFPExpanded] = useState({});
@@ -2248,7 +2248,42 @@ function App() {
 
   // ── Historic Data ──────────────────────────────────────────────────────────
   const prevHistory = useMemo(() => history.filter(s => s.date !== sessionDate), [history, sessionDate]);
-  const allDates = useMemo(() => [...new Set(prevHistory.map(s => s.date))].sort(), [prevHistory]);
+  // Parses the app's standard "DD-MM-YYYY" date strings into a real
+  // comparable number (YYYYMMDD). This is THE date format used throughout
+  // history[] — separate from parseDateKey below, which handles a
+  // different "DD Mon YYYY" display format used elsewhere in the app.
+  function parseDDMMYYYYKey(d) {
+    const s = String(d);
+    // history[] can contain dates in TWO formats depending on how the
+    // session was created — Excel import gives "DD-MM-YYYY" (dash), manual
+    // submission via toLocaleDateString gives "DD Mon YYYY" (space, short
+    // month name). Handle both so sorting/filtering never silently breaks
+    // for one or the other.
+    if (s.indexOf("-") !== -1) {
+      const p = s.split("-");
+      if (p.length !== 3) return 0;
+      const day = parseInt(p[0], 10), mon = parseInt(p[1], 10), yr = parseInt(p[2], 10);
+      if (isNaN(day) || isNaN(mon) || isNaN(yr)) return 0;
+      return yr * 10000 + mon * 100 + day;
+    }
+    const SHORT_MONTHS = { Jan:1, Feb:2, Mar:3, Apr:4, May:5, Jun:6, Jul:7, Aug:8, Sep:9, Oct:10, Nov:11, Dec:12 };
+    const p = s.split(" ");
+    if (p.length !== 3) return 0;
+    const day = parseInt(p[0], 10), mon = SHORT_MONTHS[p[1]], yr = parseInt(p[2], 10);
+    if (isNaN(day) || !mon || isNaN(yr)) return 0;
+    return yr * 10000 + mon * 100 + day;
+  }
+  // Newest first, left to right — matches how the matrix table below reads,
+  // and matches "latest to oldest" as requested. Sorted chronologically by
+  // real calendar date, NOT by string comparison (a plain .sort() on
+  // "DD-MM-YYYY" strings is wrong — e.g. "16-02-2026" would sort before
+  // "04-05-2026" as text even though it's the earlier date numerically once
+  // you account for day-first ordering, and outright wrong whenever the
+  // day or month crosses a "1" vs "0" boundary).
+  const allDates = useMemo(() =>
+    [...new Set(prevHistory.map(s => s.date))].sort((a, b) => parseDDMMYYYYKey(b) - parseDDMMYYYYKey(a)),
+    [prevHistory]
+  );
   const histRows = useMemo(() => {
     return allMembers.filter(m => m.name.toLowerCase().includes(histSearch.toLowerCase()) || m.followup.toLowerCase().includes(histSearch.toLowerCase())).map(m => {
       const cat = calcCategory(m.name, prevHistory);
@@ -2609,7 +2644,7 @@ function App() {
     const from = parseInputDate(histFrom);
     const to = parseInputDate(histTo);
     return allDates.filter(d => {
-      const v = parseDateKey(d);
+      const v = parseDDMMYYYYKey(d);
       if (from && v < from) return false;
       if (to && v > to) return false;
       return true;
@@ -3118,10 +3153,25 @@ function App() {
 
   // ── Monthly summary data ──────────────────────────────────────────────────
   const monthlySummary = useMemo(() => {
+    const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const months = {};
     prevHistory.forEach(s => {
-      const parts = s.date.split(" ");
-      const key = parts.length === 3 ? `${parts[1]} ${parts[2]}` : "Unknown";
+      // history[] can contain dates in TWO formats depending on how the
+      // session was created:
+      //   "16-02-2026"  — Excel import (DD-MM-YYYY, dash-separated)
+      //   "16 Jun 2026" — manual submission via toLocaleDateString
+      //                   (DD Mon YYYY, space-separated, short month name)
+      // Handle both rather than assuming one.
+      let key = "Unknown";
+      if (s.date.indexOf("-") !== -1) {
+        const parts = s.date.split("-");
+        if (parts.length === 3 && !isNaN(parseInt(parts[1], 10))) {
+          key = `${MONTH_NAMES[parseInt(parts[1], 10) - 1]} ${parts[2]}`;
+        }
+      } else {
+        const parts = s.date.split(" ");
+        if (parts.length === 3) key = `${parts[1]} ${parts[2]}`;
+      }
       if (!months[key]) months[key] = {
         key,
         sessions: [],
@@ -3960,7 +4010,7 @@ function App() {
   // entire purpose is editing data — Followup reassignment, New Yuvak
   // registration, Edit member, Excel import, and Settings (PIN/config/
   // delete-all). Everything else (Attendance, Dashboard, Report, Historic,
-  // Monthly, Predict, Alerts, Actions, Compare, Profiles) stays visible —
+  // Monthly, Actions, Followup Score, Compare, Profiles) stays visible —
   // viewers can look at all of it, they just can't change anything.
   var ADMIN_ONLY_TABS = ['restructure', 'register', 'edit', 'excel', 'settings'];
   var ALL_TABS_FULL=[
@@ -3969,10 +4019,9 @@ function App() {
     ['report','📊','Report'],
     ['history','🕒','Historic'],
     ['monthly','📅','Monthly'],
-    ['predict','🔮','Predict'],
-    ['alerts','🚨','Alerts'],
     ['action','⚡','Actions'],
     ['restructure','🔄','Followup'],
+    ['followupscore','🏆','Followup Score'],
     ['yoy','📆','Compare'],
     ['register','➕','New Yuvak'],
     ['edit','✏️','Edit'],
@@ -6267,6 +6316,9 @@ function App() {
     style: {
       cursor: "pointer",
       width: 80,
+      position: "sticky",
+      left: 310,
+      zIndex: 2,
       background: "#1e1e1e"
     },
     onClick: () => sortHist("cat")
@@ -6274,6 +6326,9 @@ function App() {
     style: {
       cursor: "pointer",
       width: 65,
+      position: "sticky",
+      left: 390,
+      zIndex: 2,
       background: "#1e1e1e"
     },
     onClick: () => sortHist("totalAtt")
@@ -6334,7 +6389,12 @@ function App() {
     }
   }, r.followup), /*#__PURE__*/React.createElement("td", {
     style: {
-      textAlign: "center"
+      textAlign: "center",
+      position: "sticky",
+      left: 310,
+      background: "#fff",
+      zIndex: 1,
+      boxShadow: "2px 0 4px rgba(0,0,0,.04)"
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: `badge badge-${r.cat}`
@@ -6342,7 +6402,12 @@ function App() {
     style: {
       textAlign: "center",
       fontWeight: 600,
-      color: "#15803d"
+      color: "#15803d",
+      position: "sticky",
+      left: 390,
+      background: "#fff",
+      zIndex: 1,
+      boxShadow: "2px 0 4px rgba(0,0,0,.04)"
     }
   }, filteredDates.filter(d => r.byDate[d] === "P").length), filteredDates.map(d => {
     const s = r.byDate[d];
@@ -6465,11 +6530,22 @@ function App() {
       background: bg,
       zIndex: 1
     }
-  }), /*#__PURE__*/React.createElement("td", null), /*#__PURE__*/React.createElement("td", {
+  }), /*#__PURE__*/React.createElement("td", {
+    style: {
+      position: "sticky",
+      left: 310,
+      background: bg,
+      zIndex: 1
+    }
+  }), /*#__PURE__*/React.createElement("td", {
     style: {
       textAlign: "center",
       fontWeight: 700,
-      color
+      color,
+      position: "sticky",
+      left: 390,
+      background: bg,
+      zIndex: 1
     }
   }, cat === null ? filteredDates.reduce((s, d) => {
     const sess = prevHistory.find(x => x.date === d);
@@ -7912,158 +7988,7 @@ function App() {
         fontWeight: 600
       }
     }, m.cnt, "/", fpSessions.length))))));
-  })), tab === "predict" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: darkMode ? "#94a3b8" : "#666",
-      marginBottom: 16
-    }
-  }, "Based on last 6 sessions, yuvaks whose attendance is ", /*#__PURE__*/React.createElement("b", null, "dropping"), " are flagged as at-risk. Higher risk score = more urgent attention needed."), predictionList.length === 0 && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 40,
-      textAlign: "center",
-      color: "#aaa"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 32,
-      marginBottom: 8
-    }
-  }, "\u2705"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600
-    }
-  }, "No at-risk yuvaks detected"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      marginTop: 4
-    }
-  }, "Need at least 2 sessions of data to calculate trends.")), predictionList.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))",
-      gap: 8,
-      marginBottom: 14
-    }
-  }, [["At-Risk Yuvaks", predictionList.length, "#b91c1c"], ["High Risk (5+)", predictionList.filter(m => m.riskScore >= 5).length, "#7c2d12"], ["Regular At-Risk", predictionList.filter(m => m.cat === "R").length, "#92400e"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
-    key: l,
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, l), /*#__PURE__*/React.createElement("div", {
-    className: "stat-num",
-    style: {
-      color: c
-    }
-  }, v)))), /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      overflow: "hidden"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      padding: "8px 14px",
-      background: darkMode ? "#1e293b" : "#f9f9f7",
-      fontSize: 10,
-      color: "#888",
-      fontWeight: 700,
-      textTransform: "uppercase",
-      letterSpacing: ".07em",
-      borderBottom: "1px solid #f0f0f0"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      flex: 1
-    }
-  }, "Member"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 70,
-      textAlign: "center"
-    }
-  }, "Category"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 80,
-      textAlign: "center"
-    }
-  }, "Prev 3 sess"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 80,
-      textAlign: "center"
-    }
-  }, "Last 3 sess"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 65,
-      textAlign: "center"
-    }
-  }, "Risk")), predictionList.map(m => /*#__PURE__*/React.createElement("div", {
-    key: m.name,
-    className: "row-hover",
-    style: {
-      display: "flex",
-      alignItems: "center",
-      padding: "10px 14px",
-      borderBottom: "1px solid #f5f5f5",
-      cursor: "pointer"
-    },
-    onClick: () => setProfileMember(m.name)
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 500,
-      fontSize: 13
-    }
-  }, m.name), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#888"
-    }
-  }, m.followup)), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 70,
-      textAlign: "center"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: `badge badge-${m.cat}`
-  }, m.cat === "R" ? "Regular" : m.cat === "I" ? "Irregular" : "No")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 80,
-      textAlign: "center",
-      fontWeight: 600,
-      color: "#15803d"
-    }
-  }, m.prev3, "/3"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 80,
-      textAlign: "center",
-      fontWeight: 600,
-      color: "#dc2626"
-    }
-  }, m.last3, "/3"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 65,
-      textAlign: "center"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      background: m.riskScore >= 5 ? "#fef2f2" : "#fffbeb",
-      color: m.riskScore >= 5 ? "#b91c1c" : "#92400e",
-      padding: "2px 8px",
-      borderRadius: 6,
-      fontSize: 11,
-      fontWeight: 700
-    }
-  }, m.riskScore >= 5 ? "🔴 High" : "🟡 Med"))))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 10,
-      fontSize: 11,
-      color: "#aaa"
-    }
-  }, "Click any row to view full profile. Risk score is based on attendance drop over last 6 sessions."))), tab === "action" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  })), tab === "action" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13,
       color: darkMode ? "#94a3b8" : "#666",
@@ -8604,60 +8529,10 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
     onClick: doPrintReport
   }, "Open Print View")))),
 
-  tab === "alerts" && /*#__PURE__*/React.createElement(React.Fragment, null,
+  tab === "followupscore" && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement("div", {style:{marginBottom:16}},
-      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:15,marginBottom:4}}, "🚨 Consecutive Absence Alerts"),
-      /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#888"}}, "Members absent 3+ sessions in a row")
-    ),
-    consecutiveAlerts.length === 0
-      ? /*#__PURE__*/React.createElement("div", {className:"card",style:{padding:40,textAlign:"center"}},
-          /*#__PURE__*/React.createElement("div",{style:{fontSize:32,marginBottom:8}},"✅"),
-          /*#__PURE__*/React.createElement("div",{style:{fontWeight:600,color:"#15803d"}},"No consecutive absences!"))
-      : /*#__PURE__*/React.createElement(React.Fragment, null,
-          /*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"#b91c1c",fontWeight:600,marginBottom:10}},
-            consecutiveAlerts.length + " member" + (consecutiveAlerts.length!==1?"s":"") + " flagged"),
-          /*#__PURE__*/React.createElement("div",{className:"card",style:{overflow:"hidden"}},
-            /*#__PURE__*/React.createElement("div",{style:{display:"flex",padding:"8px 14px",background:"#fff5f5",fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",borderBottom:"1px solid #fee2e2"}},
-              /*#__PURE__*/React.createElement("span",{style:{flex:1}},"Member"),
-              /*#__PURE__*/React.createElement("span",{style:{width:120}},"Follow-up"),
-              /*#__PURE__*/React.createElement("span",{style:{width:90,textAlign:"center"}},"Streak")
-            ),
-            consecutiveAlerts.map(function(x){
-              return /*#__PURE__*/React.createElement("div",{
-                key:x.name,
-                style:{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid #fef2f2",cursor:"pointer"},
-                onClick:function(){setProfileMember(x.name);}
-              },
-                /*#__PURE__*/React.createElement("div",{style:{flex:1}},
-                  /*#__PURE__*/React.createElement("div",{style:{fontWeight:600,fontSize:13,color:"#b91c1c"}},x.name),
-                  /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"#999",marginTop:1}},x.followup)
-                ),
-                /*#__PURE__*/React.createElement("div",{style:{width:120,fontSize:12,color:"#555"}},x.followup),
-                /*#__PURE__*/React.createElement("div",{style:{width:90,textAlign:"center"}},
-                  /*#__PURE__*/React.createElement("span",{style:{background:x.streak>=6?"#b91c1c":x.streak>=4?"#d97706":"#f59e0b",color:"#fff",borderRadius:12,padding:"3px 10px",fontSize:12,fontWeight:700}},
-                    x.streak + " missed")
-                )
-              );
-            })
-          )
-        ),
-    prevHistory.length > 1 && /*#__PURE__*/React.createElement("div",{className:"card",style:{padding:20,marginTop:16}},
-      /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:14,marginBottom:14}},"📈 Attendance Trend (last 12 sessions)"),
-      trendData.length === 0
-        ? /*#__PURE__*/React.createElement("div",{style:{color:"#aaa",fontSize:13}},"No history.")
-        : /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
-            /*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"flex-end",gap:6,height:130,minWidth:260,paddingBottom:28}},
-              trendData.map(function(d,i){
-                var h2 = Math.max(8,d.pct);
-                var clr2 = d.pct>=70?"#15803d":d.pct>=50?"#d97706":"#b91c1c";
-                return /*#__PURE__*/React.createElement("div",{key:i,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
-                  /*#__PURE__*/React.createElement("div",{style:{fontSize:9,fontWeight:700,color:clr2}},d.pct+"%"),
-                  /*#__PURE__*/React.createElement("div",{title:d.date+": "+d.p+"/"+d.total,style:{width:"100%",maxWidth:26,height:h2+"px",background:clr2,borderRadius:"4px 4px 0 0",opacity:.85}}),
-                  /*#__PURE__*/React.createElement("div",{style:{fontSize:8,color:"#aaa",transform:"rotate(-40deg)",transformOrigin:"top center",marginTop:4,whiteSpace:"nowrap"}},d.date)
-                );
-              })
-            )
-          )
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:15,marginBottom:4}}, "\uD83C\uDFC6 Followup Scoreboard"),
+      /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#888"}}, "Retention % per follow-up person across all sessions, ranked highest to lowest")
     ),
     /*#__PURE__*/React.createElement("div",{style:{marginTop:24,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:4}},"🏆 Follow-up Scoreboard"),
@@ -8690,37 +8565,6 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
             );
           })
         )
-  ), regBecomingIrr.length > 0 && /*#__PURE__*/React.createElement("div", {style:{marginTop:16,marginBottom:16}},
-    /*#__PURE__*/React.createElement("div", {style:{fontWeight:600,fontSize:13,marginBottom:6,color:"#b45309"}},
-      "\uD83D\uDCC9 Regular \u2192 Irregular Risk (", regBecomingIrr.length, ")"
-    ),
-    /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#888",marginBottom:8}},
-      "These Regular yuvaks attended only 1 of last 4 sessions and were absent in the last 2. At risk of becoming Irregular."
-    ),
-    /*#__PURE__*/React.createElement("div", {className:"card",style:{overflow:"hidden"}},
-      /*#__PURE__*/React.createElement("div", {style:{display:"flex",padding:"8px 14px",background:"#fffbeb",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",letterSpacing:".07em",borderBottom:"1px solid #fef3c7"}},
-        /*#__PURE__*/React.createElement("span", {style:{flex:1}}, "Member"),
-        /*#__PURE__*/React.createElement("span", {style:{width:130,textAlign:"center"}}, "Last 4 Sessions"),
-        /*#__PURE__*/React.createElement("span", {style:{width:100,textAlign:"center"}}, "Action")
-      ),
-      regBecomingIrr.map(function(m,i){ return /*#__PURE__*/React.createElement("div", {key:m.name,className:"row-hover",style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:"1px solid #fef9e7"}},
-        /*#__PURE__*/React.createElement("div", {style:{flex:1,cursor:"pointer"},onClick:function(){setProfileMember(m.name);}},
-          /*#__PURE__*/React.createElement("div", {style:{fontSize:13,fontWeight:600}}, m.name),
-          /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:"#999"}}, m.followup,
-            /*#__PURE__*/React.createElement("span", {style:{marginLeft:8,color:"#64748b",fontSize:10,background:"#f1f5f9",borderRadius:4,padding:"1px 5px"}}, "\uD83D\uDCC5 Last: ", getLastAttended(m.name))
-          )
-        ),
-        /*#__PURE__*/React.createElement("div", {style:{width:130,display:"flex",gap:4,justifyContent:"center"}},
-          m.last4.map(function(s,j){ return /*#__PURE__*/React.createElement("span", {key:j,style:{width:24,height:24,borderRadius:4,background:s==="P"?"#dcfce7":"#fee2e2",color:s==="P"?"#15803d":"#991b1b",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}, s); })
-        ),
-        /*#__PURE__*/React.createElement("div", {style:{width:100,textAlign:"center"}},
-          /*#__PURE__*/React.createElement("button", {
-            onClick:function(){ var mem=allMembers.find(function(x){return x.name===m.name;}); if(mem) doWAAbsent(mem); },
-            style:{padding:"5px 10px",borderRadius:6,border:"1px solid #ddd",background:"#fffbeb",color:"#25D366",fontSize:12,cursor:"pointer"}
-          }, "\uD83D\uDCAC Follow Up")
-        )
-      );})
-    )
   ), tab === "excel" && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement("div", {style:{marginBottom:18}},
       /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:15,marginBottom:4}}, "📥 Excel — Member Directory"),
@@ -9100,61 +8944,7 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
     style: {
       color: c
     }
-  }, v))))), /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 14,
-      marginBottom: 10
-    }
-  }, "Top 10 Most Regular Yuvaks"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      overflowX: "auto"
-    }
-  }, /*#__PURE__*/React.createElement("table", {
-    style: {
-      fontSize: 13
-    }
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
-    style: {
-      width: 32
-    }
-  }, "#"), /*#__PURE__*/React.createElement("th", null, "Name"), /*#__PURE__*/React.createElement("th", null, "Followup"), /*#__PURE__*/React.createElement("th", {
-    style: {
-      width: 70
-    }
-  }, "Sessions \u2705"))), /*#__PURE__*/React.createElement("tbody", null, topYuvaks.map((m, i) => /*#__PURE__*/React.createElement("tr", {
-    key: m.name,
-    style: {
-      cursor: "pointer"
-    },
-    onClick: () => setProfileMember(m.name)
-  }, /*#__PURE__*/React.createElement("td", {
-    style: {
-      textAlign: "center",
-      color: "#f59e0b",
-      fontWeight: 700
-    }
-  }, i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1), /*#__PURE__*/React.createElement("td", {
-    style: {
-      fontWeight: 500
-    }
-  }, m.name), /*#__PURE__*/React.createElement("td", {
-    style: {
-      fontSize: 12,
-      color: "#555"
-    }
-  }, m.followup), /*#__PURE__*/React.createElement("td", {
-    style: {
-      textAlign: "center",
-      fontWeight: 600,
-      color: "#15803d"
-    }
-  }, m.totalP)))))))), settingsTab === "pin" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, v))))), ), settingsTab === "pin" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 24,
