@@ -18,7 +18,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
-    getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged
+    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
     getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp
@@ -72,30 +72,21 @@
         return ADMIN_EMAILS.map(e => e.toLowerCase()).includes((user.email || "").toLowerCase());
       };
 
-      // Catches the moment the page lands back from Google after a
-      // redirect sign-in. onAuthStateChanged (below) is the PRIMARY signal
-      // that actually drives the UI — this call is a backup/diagnostic
-      // only, since getRedirectResult() has known inconsistencies across
-      // browsers when called in isolation. Errors here are surfaced the
-      // same way as any other sign-in error.
-      getRedirectResult(auth).then(result => {
-        console.log("[ShreejiAuth] getRedirectResult resolved. User present:", !!(result && result.user));
-      }).catch(err => {
-        console.error("[ShreejiAuth] Redirect sign-in result error:", err.code || err.message || err);
-        window.dispatchEvent(new CustomEvent("shreeji-auth-error", { detail: err.message || String(err) }));
-      });
-
       // Bridge to the classic (non-module) app script below via window globals.
       window.ShreejiFirebase = {
         auth,
         db,
         isAllowed,
         isAdmin,
-        // signInWithRedirect (not signInWithPopup) — this can be called
-        // automatically right after the phone+password gate passes, with
-        // no popup-blocking risk, since it navigates the whole page to
-        // Google and back instead of opening a popup window.
-        signIn: () => signInWithRedirect(auth, provider).catch(err => {
+        // signInWithPopup (not signInWithRedirect) — redirect was tried and
+        // reverted: signInWithRedirect has a long-standing, documented
+        // Firebase SDK issue where onAuthStateChanged/getRedirectResult can
+        // fail to report the signed-in user back to the app on certain
+        // browsers, causing an infinite "back to Google" loop. Popup
+        // requires a direct user click (browsers block it otherwise), so
+        // this can only be called from an actual button press, not
+        // automatically — see the visible "Sign in with Google" button.
+        signIn: () => signInWithPopup(auth, provider).catch(err => {
           console.error("Sign-in failed:", err);
           window.dispatchEvent(new CustomEvent("shreeji-auth-error", { detail: err.message || String(err) }));
         }),
@@ -9694,12 +9685,10 @@ function AuthGate() {
   const [loadingStuck, setLoadingStuck] = useState(false);
 
   // Diagnostic + safety net: if fbReady/authChecked don't resolve within
-  // 8 seconds of mount, something is hanging (commonly: returning from a
-  // signInWithRedirect trip on a browser that partitions third-party
-  // storage, where Firebase's auth-state listener can fail to pick up
-  // the redirect result). Logs exactly what's known at that point, and
-  // flips loadingStuck so the screen can offer an actual way out instead
-  // of spinning forever.
+  // 8 seconds of mount, something is hanging — e.g. the Firebase module
+  // script failing to load/initialize. Logs exactly what's known at that
+  // point, and flips loadingStuck so the screen can offer an actual way
+  // out instead of spinning forever.
   useEffect(function () {
     var t = setTimeout(function () {
       if (!fbReady || !authChecked) {
@@ -9743,23 +9732,6 @@ function AuthGate() {
       setGateError("Incorrect password.");
     }
   }
-
-  // ── Silent Google Sign-In (no visible "Sign in with Google" screen) ──
-  // Once the phone+password gate has passed AND Firebase is ready AND
-  // we're not already signed in, kick off signInWithRedirect automatically
-  // — the person sees a brief redirect to Google's own login page (or, if
-  // they're already signed into Google in this browser, it can return
-  // almost immediately) and back, with no button to click in between.
-  // signInWithRedirect (not signInWithPopup) is what makes this safe to
-  // call without a direct click: it navigates the page itself rather than
-  // opening a popup window, so there's nothing for the browser to block.
-  useEffect(function () {
-    if (!gateUnlocked || !fbReady || !authChecked) return;
-    if (user) return; // already signed in, nothing to trigger
-    if (autoSignInTriggeredRef.current) return; // avoid firing twice
-    autoSignInTriggeredRef.current = true;
-    window.ShreejiFirebase.signIn();
-  }, [gateUnlocked, fbReady, authChecked, user]);
 
   // ── Offline detection ────────────────────────────────────────────────
   // Two signals, since either alone misses real cases:
@@ -9858,12 +9830,22 @@ function AuthGate() {
       // sessionStorage on its own). Uses a ref (not `user` in the deps
       // array) so this effect subscribes ONCE and never needlessly
       // resubscribes on every auth change it itself causes.
+      // Only reset the auto-sign-in guard on a GENUINE sign-out (we had a
+      // real user before, now we don't) — never unconditionally. Resetting
+      // it on every callback firing was the actual bug behind the
+      // "Google sign-in loop": onAuthStateChanged can fire more than once
+      // while it's still resolving a redirect-return (often once early
+      // with null before the real session is confirmed), and resetting
+      // the guard on that early null call let the auto-sign-in effect
+      // see "not signed in yet, haven't tried" and fire signInWithRedirect
+      // AGAIN immediately — sending the page back to Google before the
+      // first attempt had even finished resolving.
       if (!u && prevUserRef.current) {
         setGateUnlocked(false);
         try { sessionStorage.removeItem("shreeji_gate_unlocked"); } catch (e) {}
+        autoSignInTriggeredRef.current = false;
       }
       prevUserRef.current = u;
-      autoSignInTriggeredRef.current = false;
       setUser(u);
       setAuthChecked(true);
       window.ShreejiCurrentUser = u ? { email: u.email, name: u.displayName, isAdmin: window.ShreejiFirebase.isAdmin(u) } : null;
@@ -10048,26 +10030,33 @@ function AuthGate() {
     );
   }
 
-  // ── Not signed in yet — sign-in triggers automatically (see the
-  // useEffect above), so this is just a brief loading state, not a
-  // screen the person is expected to act on.
+  // ── Not signed in ────────────────────────────────────────────────────
   if (!user) {
     return /*#__PURE__*/React.createElement("div", { style: screenStyle },
       /*#__PURE__*/React.createElement("div", { style: cardStyle },
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 40, marginBottom: 10 } }, "🙏"),
         /*#__PURE__*/React.createElement("h2", { style: { margin: "0 0 6px", color: "#0f172a" } }, "Akshar Anand Attendance"),
-        /*#__PURE__*/React.createElement("p", { style: { color: "#64748b", fontSize: 13.5, marginBottom: 18 } },
-          "Connecting…"),
+        /*#__PURE__*/React.createElement("p", { style: { color: "#64748b", fontSize: 13.5, marginBottom: 22 } },
+          "Sign in with Google to access the shared attendance data."),
         authError && /*#__PURE__*/React.createElement("div", {
           style: { background: "#fee2e2", color: "#991b1b", borderRadius: 10, padding: "8px 12px", fontSize: 12.5, marginBottom: 14 }
         }, authError),
-        authError && /*#__PURE__*/React.createElement("button", {
-          onClick: function () { setAuthError(""); autoSignInTriggeredRef.current = false; window.ShreejiFirebase.signIn(); },
+        /*#__PURE__*/React.createElement("button", {
+          onClick: function () { setAuthError(""); window.ShreejiFirebase.signIn(); },
           style: {
-            width: "100%", padding: "11px 16px", borderRadius: 12, border: "1.5px solid #e2e8f0",
-            background: "#fff", fontSize: 13.5, fontWeight: 600, color: "#1a1a1a", cursor: "pointer"
+            display: "inline-flex", alignItems: "center", gap: 10, justifyContent: "center",
+            width: "100%", padding: "12px 16px", borderRadius: 12, border: "1.5px solid #e2e8f0",
+            background: "#fff", fontSize: 14.5, fontWeight: 600, color: "#1a1a1a", cursor: "pointer"
           }
-        }, "Try again")
+        },
+          /*#__PURE__*/React.createElement("svg", { width: 20, height: 20, viewBox: "0 0 48 48" },
+            /*#__PURE__*/React.createElement("path", { fill: "#FFC107", d: "M43.6 20.5H42V20H24v8h11.3C33.7 32.1 29.3 35 24 35c-6.1 0-11.3-3.9-13.1-9.4l-7 5.4C7.4 38.6 15 44 24 44c10.6 0 19.6-7.4 19.6-19.5 0-1.3-.1-2.7-.4-4z" }),
+            /*#__PURE__*/React.createElement("path", { fill: "#FF3D00", d: "M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.9 1.1 8.1 3l6-6C34.5 6.5 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" }),
+            /*#__PURE__*/React.createElement("path", { fill: "#4CAF50", d: "M24 44c5.2 0 9.9-1.9 13.5-5.1l-6.2-5.2C29.3 35.4 26.8 36 24 36c-5.3 0-9.7-2.9-11.3-7.4l-6.6 5.1C9.5 39.6 16.2 44 24 44z" }),
+            /*#__PURE__*/React.createElement("path", { fill: "#1976D2", d: "M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.6l6.2 5.2C40.9 36 44 30.8 44 24.5c0-1.3-.1-2.7-.4-4z" })
+          ),
+          "Sign in with Google"
+        )
       )
     );
   }
