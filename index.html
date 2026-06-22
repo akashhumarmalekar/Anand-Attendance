@@ -494,6 +494,7 @@ button:active{transform:scale(.97);}
   --teal:#0d9488;
   --navbar-h:52px;
   --tabstrip-h:46px;
+  --sticky-search-h:64px;
   --header-total:98px;          /* navbar + tabstrip */
   --radius-sm:6px;
   --radius-md:10px;
@@ -819,6 +820,41 @@ tr:hover td{background:#eff6ff !important;}
 .dark .btn-gray{background:#334155;color:#e2e8f0;border-color:#475569;}
 .btn-purple{background:var(--purple);color:#fff;}
 .btn-teal{background:var(--teal);color:#fff;}
+
+/* Row action buttons (mark Present/Absent, call, WhatsApp) used throughout
+   the Attendance tab's member rows. These were previously hand-styled
+   inline with padding as low as 5px 10px (~26-30px tall once rendered) —
+   well under the ~44px minimum recommended touch target for mobile taps
+   (Apple HIG / WCAG 2.5.5 land around there). This class fixes that across
+   every row pattern at once, since hand-editing each inline style risked
+   leaving some rows fixed and others not — exactly how the inconsistency
+   happened originally. min-height (not just padding) guarantees the full
+   tap area meets the target even when the text content is short ("P" vs
+   "✓ Present").
+*/
+.row-action-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  min-height:44px;min-width:44px;
+  padding:9px 14px;border-radius:var(--radius-md);
+  font-size:13px;font-weight:700;cursor:pointer;
+  border:1.5px solid transparent;white-space:nowrap;
+  transition:var(--t);
+}
+.row-action-btn:active{transform:scale(.95);}
+.row-action-icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:44px;min-width:44px;
+  padding:9px;border-radius:var(--radius-md);
+  font-size:15px;cursor:pointer;border:1.5px solid transparent;
+  text-decoration:none;transition:var(--t);
+}
+.row-action-icon-btn:active,.row-action-btn:active{transform:scale(.93);}
+@media(min-width:601px){
+  /* On desktop, where mis-taps aren't a concern and density matters more,
+     ease back down slightly while staying above the old 26-30px sizing. */
+  .row-action-btn{min-height:36px;padding:7px 12px;}
+  .row-action-icon-btn{min-height:36px;min-width:36px;padding:7px;}
+}
 @media(max-width:600px){
   .btn{padding:8px 12px;font-size:12.5px;}
   .hide-sm{display:none !important;}
@@ -5136,7 +5172,13 @@ function App() {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))",
       gap: 8,
-      marginBottom: 14
+      marginBottom: 14,
+      position: "sticky",
+      top: "calc(var(--navbar-h) + var(--tabstrip-h) + var(--sticky-search-h))",
+      zIndex: 55,
+      background: darkMode ? "#0f172a" : "#f5f4f0",
+      paddingTop: 6,
+      paddingBottom: 6
     }
   }, [["Present", totalP, "#15803d"], ["Absent", totalA, "#b91c1c"], ["Unmarked", allMembers.length - totalMarked, "#888"], ["Attendance", pct + "%", pct >= 70 ? "#15803d" : pct >= 40 ? "#92400e" : "#b91c1c"], ["Total", allMembers.length, "#1a1a1a"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
     key: l,
@@ -5319,7 +5361,13 @@ function App() {
       display: "flex",
       gap: 8,
       flexWrap: "wrap",
-      marginBottom: 8
+      marginBottom: 8,
+      position: "sticky",
+      top: "calc(var(--navbar-h) + var(--tabstrip-h))",
+      zIndex: 60,
+      background: darkMode ? "#0f172a" : "#f5f4f0",
+      padding: "10px 0 8px",
+      marginLeft: -2, marginRight: -2, paddingLeft: 2, paddingRight: 2
     }
   }, /*#__PURE__*/React.createElement("input", {
     className: "input-s",
@@ -5605,16 +5653,13 @@ function App() {
           justifyContent: "center"
         }
       }, /*#__PURE__*/React.createElement("button", {
+        className: "row-action-btn",
         onClick: () => mark(m.name, null),
         style: {
-          padding: "5px 14px",
-          borderRadius: 6,
+          width: "100%",
           border: "1.5px solid #15803d",
           background: "#dcfce7",
-          color: "#15803d",
-          fontWeight: 700,
-          fontSize: 12,
-          cursor: "pointer"
+          color: "#15803d"
         }
       }, "P \u2713")), /*#__PURE__*/React.createElement("div", {
         style: {
@@ -5725,34 +5770,28 @@ function App() {
         }
       }, "\u270F\uFE0F")), /*#__PURE__*/React.createElement("div", {
         style: {
-          width: 110,
+          width: 132,
           display: "flex",
-          gap: 5,
+          gap: 6,
           justifyContent: "center"
         }
       }, /*#__PURE__*/React.createElement("button", {
+        className: "row-action-btn",
         onClick: () => mark(m.name, "P"),
         style: {
-          padding: "5px 14px",
-          borderRadius: 6,
+          flex: 1,
           border: "1.5px solid #ddd",
           background: "transparent",
-          color: "#bbb",
-          fontWeight: 700,
-          fontSize: 12,
-          cursor: "pointer"
+          color: "#bbb"
         }
       }, "P"), /*#__PURE__*/React.createElement("button", {
+        className: "row-action-btn",
         onClick: () => mark(m.name, s === "A" ? null : "A"),
         style: {
-          padding: "5px 14px",
-          borderRadius: 6,
+          flex: 1,
           border: `1.5px solid ${s === "A" ? "#b91c1c" : "#ddd"}`,
           background: s === "A" ? "#fee2e2" : "transparent",
-          color: s === "A" ? "#b91c1c" : "#bbb",
-          fontWeight: 700,
-          fontSize: 12,
-          cursor: "pointer"
+          color: s === "A" ? "#b91c1c" : "#bbb"
         }
       }, "A")), /*#__PURE__*/React.createElement("div", {
         style: {
@@ -5898,41 +5937,28 @@ function App() {
       gap: 5
     }
   }, m.contact && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("a", {
+    className: "row-action-icon-btn",
     href: `tel:${m.contact}`,
     style: {
-      padding: "5px 10px",
-      borderRadius: 6,
       border: "1px solid #ddd",
       background: "#f0fdf4",
-      color: "#15803d",
-      fontSize: 12,
-      textDecoration: "none",
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 3
+      color: "#15803d"
     }
   }, "\uD83D\uDCDE"), /*#__PURE__*/React.createElement("button", {
+    className: "row-action-icon-btn",
     onClick: () => doWAAbsent(m),
     style: {
-      padding: "5px 10px",
-      borderRadius: 6,
       border: "1px solid #ddd",
       background: "#f0fdf4",
-      color: "#25D366",
-      fontSize: 12,
-      cursor: "pointer"
+      color: "#25D366"
     }
   }, "\uD83D\uDCAC")), /*#__PURE__*/React.createElement("button", {
+    className: "row-action-btn",
     onClick: () => mark(m.name, "P"),
     style: {
-      padding: "5px 14px",
-      borderRadius: 7,
       border: "1.5px solid #15803d",
       background: "#dcfce7",
-      color: "#15803d",
-      fontWeight: 700,
-      fontSize: 12,
-      cursor: "pointer"
+      color: "#15803d"
     }
   }, "\u2713 Present")))))))), panelSubTab === "irrAbsent" && /*#__PURE__*/React.createElement(React.Fragment, null,
   irregularAbsent.length === 0
@@ -5958,12 +5984,12 @@ function App() {
               /*#__PURE__*/React.createElement("div", {style:{fontSize:13,fontWeight:600,color:"#1a1a1a"}}, m.name),
               /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:"#999",marginTop:1}}, m.followup)
             ),
-            /*#__PURE__*/React.createElement("div", {style:{flexShrink:0,display:"flex",gap:5}},
+            /*#__PURE__*/React.createElement("div", {style:{flexShrink:0,display:"flex",gap:6}},
               m.contact && /*#__PURE__*/React.createElement(React.Fragment, null,
-                /*#__PURE__*/React.createElement("a", {href:"tel:"+m.contact,style:{padding:"5px 10px",borderRadius:6,border:"1px solid #ddd",background:"#f0fdf4",color:"#15803d",fontSize:12,textDecoration:"none"}}, "\uD83D\uDCDE"),
-                /*#__PURE__*/React.createElement("button", {onClick:function(){doWAAbsent(m);},style:{padding:"5px 10px",borderRadius:6,border:"1px solid #ddd",background:"#fffbeb",color:"#25D366",fontSize:12,cursor:"pointer"}}, "\uD83D\uDCAC")
+                /*#__PURE__*/React.createElement("a", {className:"row-action-icon-btn",href:"tel:"+m.contact,style:{border:"1px solid #ddd",background:"#f0fdf4",color:"#15803d"}}, "\uD83D\uDCDE"),
+                /*#__PURE__*/React.createElement("button", {className:"row-action-icon-btn",onClick:function(){doWAAbsent(m);},style:{border:"1px solid #ddd",background:"#fffbeb",color:"#25D366"}}, "\uD83D\uDCAC")
               ),
-              /*#__PURE__*/React.createElement("button", {onClick:function(){mark(m.name,"P");},style:{padding:"5px 14px",borderRadius:7,border:"1.5px solid #d97706",background:"#fef3c7",color:"#92400e",fontWeight:700,fontSize:12,cursor:"pointer"}}, "\u2713 Present")
+              /*#__PURE__*/React.createElement("button", {className:"row-action-btn",onClick:function(){mark(m.name,"P");},style:{border:"1.5px solid #d97706",background:"#fef3c7",color:"#92400e"}}, "\u2713 Present")
             )
           );})
         )
