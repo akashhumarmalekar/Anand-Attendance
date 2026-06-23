@@ -3480,18 +3480,52 @@ function App() {
     const liveI = allMembers.filter(m => calcCategory(m.name, prevHistory) === "I").length;
     const liveN = allMembers.filter(m => calcCategory(m.name, prevHistory) === "N").length;
 
-    // Followup performance (avg % over last 6 sessions)
-    const fpPerf = allFollowups.map(fp => {
-      const members = allMembers.filter(m => m.followup === fp);
+    // Followup Group Performance — redesigned to show, per leader:
+    //   - present/total for the LATEST session only (not an average)
+    //   - live category counts (R/I/N) among that leader's current members
+    //   - a short trend (per-session % over the last 6 sessions) for a sparkline
+    // Members with no followup value (blank/missing) are grouped under
+    // "Unassigned" rather than silently dropped or shown as an empty label.
+    const fpGroups = [...new Set(allMembers.map(m => (m.followup || "").trim() || "Unassigned"))].sort((a, b) => {
+      if (a === "Unassigned") return 1;
+      if (b === "Unassigned") return -1;
+      return a.localeCompare(b);
+    });
+    const fpPerf = fpGroups.map(fp => {
+      const members = allMembers.filter(m => ((m.followup || "").trim() || "Unassigned") === fp);
       if (!members.length) return null;
-      const avgPres = last6.reduce((sum, s) => {
-        const cnt = s.records.filter(r => members.some(m => m.name === r.name) && r.status === "P").length;
-        return sum + Math.round(cnt / members.length * 100);
-      }, 0) / Math.max(last6.length, 1);
+      const memberNames = members.map(m => m.name);
+
+      // Latest-session present/total for THIS group specifically.
+      const latestSession = last6.length ? last6[last6.length - 1] : null;
+      const presentLatest = latestSession
+        ? latestSession.records.filter(r => memberNames.includes(r.name) && r.status === "P").length
+        : 0;
+      const totalLatest = members.length;
+      const latestPct = totalLatest > 0 ? Math.round(presentLatest / totalLatest * 100) : 0;
+
+      // Live category counts among this group's current members.
+      let catR = 0, catI = 0, catN = 0;
+      members.forEach(m => {
+        const c = getCategory(m.name, prevHistory);
+        if (c === "R") catR++; else if (c === "I") catI++; else catN++;
+      });
+
+      // Sparkline: per-session % for this group across last6.
+      const sparkline = last6.map(s => {
+        const p = s.records.filter(r => memberNames.includes(r.name) && r.status === "P").length;
+        return totalLatest > 0 ? Math.round(p / totalLatest * 100) : 0;
+      });
+
       return {
         fp,
-        avg: Math.round(avgPres),
-        members: members.length
+        present: presentLatest,
+        total: totalLatest,
+        avg: latestPct,
+        members: members.length,
+        catR, catI, catN,
+        sparkline,
+        latestDate: latestSession ? latestSession.date : null
       };
     }).filter(Boolean).sort((a, b) => b.avg - a.avg);
 
@@ -4890,94 +4924,75 @@ function App() {
       color: "#888",
       fontWeight: 400
     }
-  }, "(avg attendance % \u2014 last 6 sessions)")), /*#__PURE__*/React.createElement("div", {
+  }, "(latest session \u2014 present/total per group)"), dashData.fpPerf.length > 0 && dashData.fpPerf[0].latestDate && /*#__PURE__*/React.createElement("span", {
     style: {
-      overflowX: "auto",
-      marginTop: 12
+      fontSize: 11, fontWeight: 600, color: "#7c3aed", background: "#f3e8ff",
+      padding: "3px 10px", borderRadius: 20, marginLeft: 8, float: "right"
     }
-  }, (() => {
-    const data = dashData.fpPerf;
-    const maxAvg = Math.max(...data.map(d => d.avg), 1);
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        minWidth: 400
-      }
-    }, data.map((fp, i) => /*#__PURE__*/React.createElement("div", {
-      key: fp.fp,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 8
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 130,
-        fontSize: 11,
-        color: "#555",
-        textAlign: "right",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis"
-      },
-      title: fp.fp
-    }, fp.fp), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        background: "#f3f4f6",
-        borderRadius: 6,
-        height: 20,
-        overflow: "hidden",
-        position: "relative"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        height: "100%",
-        width: `${fp.avg}%`,
-        borderRadius: 6,
-        background: fp.avg >= 75 ? "#15803d" : fp.avg >= 50 ? "#d97706" : "#dc2626",
-        transition: "width .3s"
-      }
-    }), /*#__PURE__*/React.createElement("span", {
-      style: {
-        position: "absolute",
-        right: 6,
-        top: 2,
-        fontSize: 10,
-        fontWeight: 600,
-        color: fp.avg >= 75 ? "#15803d" : fp.avg >= 50 ? "#92400e" : "#b91c1c"
-      }
-    }, fp.avg, "%")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 24,
-        fontSize: 11,
-        color: "#aaa"
-      }
-    }, fp.members))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 16,
-        marginTop: 10,
-        fontSize: 11,
-        color: "#888"
-      }
-    }, [["#15803d", ">=75% (Good)"], ["#d97706", "50-74% (Fair)"], ["#dc2626", "<50% (Needs attention)"]].map(([c, l]) => /*#__PURE__*/React.createElement("span", {
-      key: l,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 4
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        width: 10,
-        height: 10,
-        borderRadius: 2,
-        background: c,
-        display: "inline-block"
-      }
-    }), l))));
-  })())), /*#__PURE__*/React.createElement("div", {
+  }, dashData.fpPerf[0].latestDate)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14,
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+      gap: "18px 28px"
+    }
+  }, dashData.fpPerf.map(fp => {
+    const tone = fp.avg >= 75 ? "#15803d" : fp.avg >= 50 ? "#d97706" : "#dc2626";
+    // Tiny inline sparkline — no charting library needed for 6 points.
+    const spark = fp.sparkline.length > 1 ? fp.sparkline : [fp.avg, fp.avg];
+    const sMax = Math.max(...spark, 1), sMin = Math.min(...spark, 0);
+    const sRange = Math.max(sMax - sMin, 1);
+    const pts = spark.map((v, i) => {
+      const x = (i / (spark.length - 1)) * 56;
+      const y = 22 - ((v - sMin) / sRange) * 20;
+      return `${x},${y}`;
+    }).join(" ");
+    const lastPt = spark.length > 1 ? [56, 22 - ((spark[spark.length - 1] - sMin) / sRange) * 20] : [56, 11];
+    return /*#__PURE__*/React.createElement("div", { key: fp.fp },
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13.5 } }, fp.fp),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#999" } }, `${fp.present}/${fp.total}`),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, fontWeight: 700, color: tone } }, `${fp.avg}%`),
+          /*#__PURE__*/React.createElement("svg", { width: 56, height: 22, style: { flexShrink: 0 } },
+            /*#__PURE__*/React.createElement("polyline", { points: pts, fill: "none", stroke: tone, strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round" }),
+            /*#__PURE__*/React.createElement("circle", { cx: lastPt[0], cy: lastPt[1], r: 2.2, fill: tone })
+          )
+        )
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 5, marginBottom: 8 } },
+        /*#__PURE__*/React.createElement("span", { className: "badge badge-R", style: { fontSize: 10, padding: "1px 7px" } }, fp.catR + "R"),
+        /*#__PURE__*/React.createElement("span", { className: "badge badge-I", style: { fontSize: 10, padding: "1px 7px" } }, fp.catI + "I"),
+        /*#__PURE__*/React.createElement("span", { className: "badge badge-N", style: { fontSize: 10, padding: "1px 7px" } }, fp.catN + "N")
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { background: "#f3f4f6", borderRadius: 6, height: 7, overflow: "hidden" } },
+        /*#__PURE__*/React.createElement("div", { style: { height: "100%", width: `${fp.avg}%`, borderRadius: 6, background: tone, transition: "width .3s" } })
+      )
+    );
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 16,
+      marginTop: 16,
+      fontSize: 11,
+      color: "#888"
+    }
+  }, [["#15803d", ">=75% (Good)"], ["#d97706", "50-74% (Fair)"], ["#dc2626", "<50% (Needs attention)"]].map(([c, l]) => /*#__PURE__*/React.createElement("span", {
+    key: l,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 10,
+      height: 10,
+      borderRadius: 2,
+      background: c,
+      display: "inline-block"
+    }
+  }), l)))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 20,
