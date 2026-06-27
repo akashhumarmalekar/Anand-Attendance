@@ -1791,8 +1791,6 @@ function App() {
   const [histTo, setHistTo] = useState(restoredUI.histTo || ""); const [histDateFilter, setHistDateFilter] = useState(restoredUI.histDateFilter || {date: null, status: "ALL"});
   const [histEditCell, setHistEditCell] = useState(null);
   const [deleteHistDate, setDeleteHistDate] = useState(null);
-  // Profile drawer
-  const [profileMember, setProfileMember] = useState(null);
   // PIN lock
   const [pin, setPin] = useState(loadPin);
   const [pinInput, setPinInput] = useState("");
@@ -1832,7 +1830,7 @@ function App() {
   const swipeRef = useRef(null);
   const swipeStartX = useRef(null);
   const [timeEditName, setTimeEditName] = useState(null); // which member's time is being edited
-  const TAB_ORDER = ["dashboard", "panel", "report", "history", "monthly", "action", "restructure", "yoy", "register", "edit", "profiles", "excel", "settings"];
+  const TAB_ORDER = ["dashboard", "panel", "report", "history", "monthly", "action", "restructure", "yoy", "register", "edit", "excel", "settings"];
 
   // ── Followup Restructuring state
   const [fpExpanded, setFPExpanded] = useState({});
@@ -1856,11 +1854,6 @@ function App() {
   const [editTarget, setEditTarget] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [editDeleteConfirm, setEditDeleteConfirm] = useState(null);
-  // ── Profiles tab state
-  const [profileSearch, setProfileSearch] = useState(restoredUI.profileSearch || "");
-  const [profileFPFilter, setProfileFPFilter] = useState(restoredUI.profileFPFilter || "All");
-  const [profileEditTarget, setProfileEditTarget] = useState(null);
-  const [profileEditForm, setProfileEditForm] = useState(null);
   // ── Reference overrides (for MASTER members that don't have reference in their object)
   const LS_REFOV = "shreeji_ref_overrides";
   const [referenceOverrides, setReferenceOverrides] = useState(function() {
@@ -2765,57 +2758,6 @@ function App() {
     return "Never";
   }
 
-  // ── Profile tab edit helpers ──────────────────────────────────────────────
-  function openProfileEdit(m) {
-    const fp = fpOverrides[m.name] || m.followup;
-    const contact = m.isExtra ? m.contact : (getExtra(m.name, "contact") || m.contact || "");
-    setProfileEditTarget(m);
-    setProfileEditForm({
-      fullName: m.name,
-      followup: fp,
-      contact: contact,
-      cat: catOverrides[m.name] || "auto"
-    });
-  }
-  function saveProfileEdit() {
-    if (!requireAdmin()) return;
-    if (!profileEditForm || !profileEditTarget) return;
-    const oldName = profileEditTarget.name;
-    const newName = profileEditForm.fullName.trim();
-    if (!newName) { toast_("Name cannot be empty", "error"); return; }
-    // Category override
-    const newCat = {...catOverrides};
-    if (profileEditForm.cat === "auto") delete newCat[newName]; else newCat[newName] = profileEditForm.cat;
-    // If name changed, also move old cat key
-    if (newName !== oldName) { delete newCat[oldName]; if (profileEditForm.cat !== "auto") newCat[newName] = profileEditForm.cat; }
-    setCatOverrides(newCat); saveCatOv(newCat);
-    // Followup override
-    const newOv = {...fpOverrides};
-    if (profileEditForm.followup !== profileEditTarget.followup) newOv[newName] = profileEditForm.followup;
-    else delete newOv[newName];
-    // Contact
-    if (!profileEditTarget.isExtra) {
-      newOv[`${newName}__contact`] = profileEditForm.contact;
-    }
-    if (newName !== oldName) {
-      delete newOv[oldName]; delete newOv[`${oldName}__contact`];
-      // rename attendance
-      const newAtt = {...attendance};
-      if (newAtt[oldName]) { newAtt[newName] = newAtt[oldName]; delete newAtt[oldName]; }
-      setAttendance(newAtt); saveAtt(newAtt);
-      // rename history
-      const newHist = history.map(s => ({...s, records: s.records.map(r => r.name === oldName ? {...r, name: newName} : r)}));
-      setHistory(newHist); saveHist(newHist);
-    }
-    if (profileEditTarget.isExtra) {
-      const upd = extraMembers.map(m => m.name === oldName ? {...m, name: newName, contact: profileEditForm.contact, followup: profileEditForm.followup} : m);
-      setExtraMembers(upd); saveMembers(upd);
-    }
-    setFPOverrides(newOv); saveFPOverrides(newOv);
-    setProfileEditTarget(null); setProfileEditForm(null);
-    toast_(`${newName} profile updated!`);
-  }
-
   // ── Historic date range helpers ───────────────────────────────────────────
   // Parse "02 May 2025" style dates to comparable YYYYMMDD numbers
   const MONTHS = {
@@ -3443,60 +3385,6 @@ function App() {
     }).sort((a, b) => b.totalP - a.totalP).slice(0, 10);
   }, [prevHistory, allMembers]);
 
-  // ── Individual profile data ───────────────────────────────────────────────
-  function getProfileData(name) {
-    const m = allMembers.find(x => x.name === name);
-    if (!m) return null;
-    const cat = getCategory(name, prevHistory);
-    const totalP = prevHistory.filter(s => s.records.find(r => r.name === name && r.status === "P")).length;
-    const totalS = prevHistory.length;
-    const pct = totalS > 0 ? Math.round(totalP / totalS * 100) : 0;
-    // Last 3 months
-    const now = new Date();
-    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-    const recent = prevHistory.filter(s => {
-      const parts = s.date.split(" ");
-      if (parts.length !== 3) return false;
-      const MONTHS2 = {
-        Jan: 0,
-        Feb: 1,
-        Mar: 2,
-        Apr: 3,
-        May: 4,
-        Jun: 5,
-        Jul: 6,
-        Aug: 7,
-        Sep: 8,
-        Oct: 9,
-        Nov: 10,
-        Dec: 11
-      };
-      const d = new Date(parseInt(parts[2]), MONTHS2[parts[1]], parseInt(parts[0]));
-      return d >= threeMonthsAgo;
-    });
-    const recentP = recent.filter(s => s.records.find(r => r.name === name && r.status === "P")).length;
-    const recentPct = recent.length > 0 ? Math.round(recentP / recent.length * 100) : 0;
-    const sessions = prevHistory.map(s => {
-      var _s$records$find;
-      return {
-        date: s.date,
-        status: ((_s$records$find = s.records.find(r => r.name === name)) === null || _s$records$find === void 0 ? void 0 : _s$records$find.status) || null,
-        note: s.note
-      };
-    }).reverse();
-    return {
-      m,
-      cat,
-      totalP,
-      totalS,
-      pct,
-      recentP,
-      recentS: recent.length,
-      recentPct,
-      sessions
-    };
-  }
-
   // ── Backup & Restore ─────────────────────────────────────────────────────
   function doBackup() {
     const data = {
@@ -3687,12 +3575,12 @@ function App() {
     saveUIState({
       tab, panelSubTab, search, filterFP,
       histSearch, histSort, histSortDir, histFrom, histTo, histDateFilter,
-      monthlyFP, editSearch, editFilter, profileSearch, profileFPFilter
+      monthlyFP, editSearch, editFilter
     });
   }, [
     tab, panelSubTab, search, filterFP,
     histSearch, histSort, histSortDir, histFrom, histTo, histDateFilter,
-    monthlyFP, editSearch, editFilter, profileSearch, profileFPFilter
+    monthlyFP, editSearch, editFilter
   ]);
 
   // ── Scroll position persistence ──────────────────────────────────────────
@@ -4355,7 +4243,6 @@ function App() {
     ['yoy','📆','Compare'],
     ['register','➕','New Yuvak'],
     ['edit','✏️','Edit'],
-    ['profiles','👤','Profiles'],
     ['excel','📥','Excel'],
     ['settings','⚙️','Settings'],
   ];
@@ -5825,9 +5712,8 @@ function App() {
         style: {
           flex: 1,
           minWidth: 0,
-          cursor: "pointer"
-        },
-        onClick: () => setProfileMember(m.name)
+          cursor: "default"
+        }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 13,
@@ -5939,9 +5825,8 @@ function App() {
         style: {
           flex: 1,
           minWidth: 0,
-          cursor: "pointer"
-        },
-        onClick: () => setProfileMember(m.name)
+          cursor: "default"
+        }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 13,
@@ -6109,9 +5994,8 @@ function App() {
     style: {
       flex: 1,
       minWidth: 0,
-      cursor: "pointer"
-    },
-    onClick: () => setProfileMember(m.name)
+      cursor: "default"
+    }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13,
@@ -6174,7 +6058,7 @@ function App() {
           ),
           irregularAbsent.map(function(m,i){ return /*#__PURE__*/React.createElement("div", {key:m.name,className:"row-hover",style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderBottom:"1px solid #fef9e7",background:"#fffdf5"}},
             /*#__PURE__*/React.createElement("div", {style:{width:28,textAlign:"center",fontSize:12,color:"#aaa",flexShrink:0}}, i+1),
-            /*#__PURE__*/React.createElement("div", {style:{flex:1,minWidth:0,cursor:"pointer"},onClick:function(){setProfileMember(m.name);}},
+            /*#__PURE__*/React.createElement("div", {style:{flex:1,minWidth:0}},
               /*#__PURE__*/React.createElement("div", {style:{fontSize:13,fontWeight:600,color:"#1a1a1a"}}, m.name),
               /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:"#999",marginTop:1}}, m.followup)
             ),
@@ -8349,9 +8233,8 @@ function App() {
         borderRadius: 8,
         padding: "5px 10px",
         fontSize: 12,
-        cursor: "pointer"
-      },
-      onClick: () => setProfileMember(m.name)
+        cursor: "default"
+      }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
         color: "#888",
@@ -8407,7 +8290,7 @@ function App() {
             /*#__PURE__*/React.createElement("button", {
               className:"btn btn-gray",
               style:{fontSize:11,padding:"4px 10px"},
-              onClick: function(){ setProfileMember(m.name); }
+              onClick: function(){} 
             }, "\uD83D\uDCAC Follow Up")
           )
         );
@@ -8487,9 +8370,8 @@ function App() {
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           flex: 1,
-          cursor: "pointer"
-        },
-        onClick: () => setProfileMember(m.name)
+          cursor: "default"
+        }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           fontWeight: 500,
@@ -8538,416 +8420,7 @@ function App() {
       }, "\uD83D\uDCAC")));
     })));
   }))),
-tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
-  /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14,alignItems:"center"}},
-    /*#__PURE__*/React.createElement("input", {className:"input-s",placeholder:"\uD83D\uDD0D Search by name...",value:profileSearch,onChange:function(e){setProfileSearch(e.target.value);},style:{flex:1,minWidth:160}}),
-    /*#__PURE__*/React.createElement("select", {className:"input-s",value:profileFPFilter,onChange:function(e){setProfileFPFilter(e.target.value);},style:{width:"auto",flex:"none"}},
-      followups.map(function(f){ return /*#__PURE__*/React.createElement("option",{key:f},f); })
-    )
-  ),
-  /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#888",marginBottom:10}},
-    allMembers.length, " yuvaks \u00B7 Click \u270F to edit Full Name, Followup, Contact"
-  ),
-  /*#__PURE__*/React.createElement("div", {className:"card",style:{overflowX:"auto"}},
-    /*#__PURE__*/React.createElement("table", {style:{minWidth:580}},
-      /*#__PURE__*/React.createElement("thead", null,
-        /*#__PURE__*/React.createElement("tr", null,
-          /*#__PURE__*/React.createElement("th", {style:{width:32}}, "#"),
-          /*#__PURE__*/React.createElement("th", null, "Full Name"),
-          /*#__PURE__*/React.createElement("th", null, "Followup"),
-          /*#__PURE__*/React.createElement("th", {style:{width:110}}, "Contact"),
-          /*#__PURE__*/React.createElement("th", {style:{width:110,textAlign:"center"}}, "Last Attended"),
-          /*#__PURE__*/React.createElement("th", {style:{width:52,textAlign:"center"}}, "Edit")
-        )
-      ),
-      /*#__PURE__*/React.createElement("tbody", null,
-        allMembers.filter(function(m){
-          var q=profileSearch.toLowerCase();
-          return (m.name.toLowerCase().includes(q)||(fpOverrides[m.name]||m.followup).toLowerCase().includes(q)) &&
-            (profileFPFilter==="All"||(fpOverrides[m.name]||m.followup)===profileFPFilter);
-        }).map(function(m,i){
-          var fp=fpOverrides[m.name]||m.followup;
-          var contact=m.isExtra?m.contact:(getExtra(m.name,"contact")||m.contact||"");
-          var lastAtt=getLastAttended(m.name);
-          return /*#__PURE__*/React.createElement("tr",{key:m.name,className:"row-hover"},
-            /*#__PURE__*/React.createElement("td",{style:{color:"#aaa",textAlign:"center",fontSize:12}},i+1),
-            /*#__PURE__*/React.createElement("td",{style:{fontWeight:500,fontSize:13}},m.name),
-            /*#__PURE__*/React.createElement("td",{style:{fontSize:12,color:"#555"}},fp),
-            /*#__PURE__*/React.createElement("td",{style:{fontSize:12}},contact||/*#__PURE__*/React.createElement("span",{style:{color:"#ccc"}},"\u2014")),
-            /*#__PURE__*/React.createElement("td",{style:{textAlign:"center",fontSize:12,color:lastAtt==="Never"?"#ccc":"#555"}},lastAtt),
-            /*#__PURE__*/React.createElement("td",{style:{textAlign:"center"}},
-              /*#__PURE__*/React.createElement("button",{className:"btn btn-blue",style:{padding:"4px 10px",fontSize:11},onClick:function(){openProfileEdit(m);}},"\u270F")
-            )
-          );
-        })
-      )
-    )
-  ),
-  profileEditTarget && profileEditForm && /*#__PURE__*/React.createElement("div", {className:"modal-bg",onClick:function(){setProfileEditTarget(null);setProfileEditForm(null);}},
-    /*#__PURE__*/React.createElement("div", {style:{background:"#fff",borderRadius:14,padding:26,maxWidth:460,width:"94%",boxShadow:"0 10px 50px rgba(0,0,0,.22)",maxHeight:"90vh",overflowY:"auto"},onClick:function(e){e.stopPropagation();}},
-      /*#__PURE__*/React.createElement("div", {style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}},
-        /*#__PURE__*/React.createElement("h2", {style:{margin:0,fontSize:17}}, "\u270F\uFE0F Edit Profile"),
-        /*#__PURE__*/React.createElement("span", {style:{fontSize:11,background:profileEditTarget.isExtra?"#ede9fe":"#f0fdf4",color:profileEditTarget.isExtra?"#7c3aed":"#166534",padding:"3px 9px",borderRadius:5,fontWeight:600}},
-          profileEditTarget.isExtra?"Registered":"Master DB"
-        )
-      ),
-      /*#__PURE__*/React.createElement("div", {style:{display:"flex",flexDirection:"column",gap:12}},
-        /*#__PURE__*/React.createElement("div", null,
-          /*#__PURE__*/React.createElement("label", {className:"form-label"}, "Full Name *"),
-          /*#__PURE__*/React.createElement("input", {className:"form-input",value:profileEditForm.fullName,onChange:function(e){setProfileEditForm(function(f){return{...f,fullName:e.target.value};});}})
-        ),
-        /*#__PURE__*/React.createElement("div", null,
-          /*#__PURE__*/React.createElement("label", {className:"form-label"}, "Followup Group"),
-          /*#__PURE__*/React.createElement("select", {className:"form-input",value:profileEditForm.followup,onChange:function(e){setProfileEditForm(function(f){return{...f,followup:e.target.value};});}},
-            allFollowups.map(function(fp){return /*#__PURE__*/React.createElement("option",{key:fp},fp);})
-          )
-        ),
-        /*#__PURE__*/React.createElement("div", null,
-          /*#__PURE__*/React.createElement("label", {className:"form-label"}, "Contact"),
-          /*#__PURE__*/React.createElement("input", {className:"form-input",placeholder:"10-digit mobile",value:profileEditForm.contact,onChange:function(e){setProfileEditForm(function(f){return{...f,contact:e.target.value};});}})
-        ),
-        /*#__PURE__*/React.createElement("div", {style:{background:"#f8fafc",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#555"}},
-          /*#__PURE__*/React.createElement("span", {style:{fontWeight:600,color:"#1a1a1a"}}, "Last Attended: "),
-          /*#__PURE__*/React.createElement("span", {style:{color: getLastAttended(profileEditTarget.name)==="Never"?"#ccc":"#15803d",fontWeight:600}},
-            getLastAttended(profileEditTarget.name)
-          )
-        )
-      ),
-      /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:10,justifyContent:"flex-end",marginTop:18}},
-        /*#__PURE__*/React.createElement("button", {className:"btn btn-gray",onClick:function(){setProfileEditTarget(null);setProfileEditForm(null);}}, "Cancel"),
-        /*#__PURE__*/React.createElement("button", {className:"btn btn-green",onClick:saveProfileEdit}, "Save Changes \u2713")
-      )
-    )
-  )
-), tab === "yoy" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: darkMode ? "#94a3b8" : "#666",
-      marginBottom: 16
-    }
-  }, "Compare attendance between any two custom date ranges \u2014 e.g. this month vs last month, or this year vs last year."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 14,
-      marginBottom: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 18,
-      borderLeft: "4px solid #1e40af"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 13,
-      color: "#1e40af",
-      marginBottom: 10
-    }
-  }, "Range A"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      flexDirection: "column"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "From"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange1From,
-    onChange: e => setYoyRange1From(e.target.value)
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "To"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange1To,
-    onChange: e => setYoyRange1To(e.target.value)
-  })))), /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 18,
-      borderLeft: "4px solid #15803d"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 13,
-      color: "#15803d",
-      marginBottom: 10
-    }
-  }, "Range B"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      flexDirection: "column"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "From"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange2From,
-    onChange: e => setYoyRange2From(e.target.value)
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "To"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange2To,
-    onChange: e => setYoyRange2To(e.target.value)
-  }))))), (yoyRange1From || yoyRange1To || yoyRange2From || yoyRange2To) && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-      gap: 10,
-      marginBottom: 16
-    }
-  }, [{
-    label: "Sessions",
-    a: yoyData.r1.sessions,
-    b: yoyData.r2.sessions
-  }, {
-    label: "Avg Present",
-    a: yoyData.r1.avgPresent,
-    b: yoyData.r2.avgPresent
-  }, {
-    label: "Avg %",
-    a: yoyData.r1.avgPct + "%",
-    b: yoyData.r2.avgPct + "%"
-  }].map(({
-    label,
-    a,
-    b
-  }) => {
-    const aNum = parseInt(a),
-      bNum = parseInt(b);
-    const aWins = !isNaN(aNum) && !isNaN(bNum) && aNum > bNum;
-    const bWins = !isNaN(aNum) && !isNaN(bNum) && bNum > aNum;
-    return /*#__PURE__*/React.createElement("div", {
-      key: label,
-      className: "card",
-      style: {
-        padding: 16,
-        textAlign: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#888",
-        textTransform: "uppercase",
-        letterSpacing: ".06em",
-        marginBottom: 10
-      }
-    }, label), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        justifyContent: "space-around",
-        alignItems: "center",
-        gap: 8
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#1e40af",
-        fontWeight: 600,
-        marginBottom: 2
-      }
-    }, "Range A"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 22,
-        fontWeight: 700,
-        color: aWins ? "#15803d" : bWins ? "#b91c1c" : "#1e40af"
-      }
-    }, a, aWins ? " 🏆" : "")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 16,
-        color: "#ddd"
-      }
-    }, "vs"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#15803d",
-        fontWeight: 600,
-        marginBottom: 2
-      }
-    }, "Range B"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 22,
-        fontWeight: 700,
-        color: bWins ? "#15803d" : aWins ? "#b91c1c" : "#15803d"
-      }
-    }, b, bWins ? " 🏆" : ""))));
-  })), (yoyData.raw1.length > 0 || yoyData.raw2.length > 0) && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 13,
-      marginBottom: 14
-    }
-  }, "Session-by-session comparison"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 12
-    }
-  }, [{
-    label: "Range A",
-    sessions: yoyData.raw1,
-    color: "#1e40af"
-  }, {
-    label: "Range B",
-    sessions: yoyData.raw2,
-    color: "#15803d"
-  }].map(({
-    label,
-    sessions,
-    color
-  }) => /*#__PURE__*/React.createElement("div", {
-    key: label
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      fontWeight: 600,
-      color,
-      marginBottom: 8
-    }
-  }, label, " (", sessions.length, " sessions)"), sessions.length === 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: "#aaa"
-    }
-  }, "No sessions in this range."), sessions.map((s, i) => {
-    const cnt = s.records.filter(r => r.status === "P").length;
-    const pct2 = allMembers.length ? Math.round(cnt / allMembers.length * 100) : 0;
-    return /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 6
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 80,
-        fontSize: 10,
-        color: "#888",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis"
-      }
-    }, s.date.split(" ").slice(0, 2).join(" ")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        background: "#f3f4f6",
-        borderRadius: 4,
-        height: 16,
-        overflow: "hidden"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        height: "100%",
-        width: `${pct2}%`,
-        background: color,
-        borderRadius: 4,
-        opacity: 0.85
-      }
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 36,
-        fontSize: 11,
-        fontWeight: 600,
-        color,
-        textAlign: "right"
-      }
-    }, pct2, "%"));
-  })))))), !yoyRange1From && !yoyRange1To && !yoyRange2From && !yoyRange2To && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 36,
-      textAlign: "center",
-      color: "#aaa"
-    }
-  }, "Select date ranges above to compare.")), showPrintModal && /*#__PURE__*/React.createElement("div", {
-    className: "modal-bg",
-    onClick: () => setShowPrintModal(false)
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "modal",
-    onClick: e => e.stopPropagation()
-  }, /*#__PURE__*/React.createElement("h2", {
-    style: {
-      margin: "0 0 10px",
-      fontSize: 17
-    }
-  }, "\uD83D\uDDA8 Print / Save Report"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 13,
-      color: "#666",
-      margin: "0 0 16px"
-    }
-  }, "Generates a print-ready A4 report with: today's attendance, followup summary, present/absent lists, and dashboard snapshot."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr 1fr",
-      gap: 8,
-      marginBottom: 18
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Present"), /*#__PURE__*/React.createElement("div", {
-    className: "stat-num",
-    style: {
-      color: "#15803d"
-    }
-  }, totalP)), /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Absent"), /*#__PURE__*/React.createElement("div", {
-    className: "stat-num",
-    style: {
-      color: "#b91c1c"
-    }
-  }, totalA)), /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Sabha"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 600,
-      marginTop: 4
-    }
-  }, sabhaType))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 10,
-      justifyContent: "flex-end"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-gray",
-    onClick: () => setShowPrintModal(false)
-  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-blue",
-    onClick: doPrintReport
-  }, "Open Print View")))),
+
 
   tab === "excel" && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement("div", {style:{marginBottom:18}},
@@ -9677,308 +9150,7 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
       /*#__PURE__*/React.createElement("button", {className:"btn btn-gray", onClick: function(){ setImportPreview(null); }}, "Cancel"),
       /*#__PURE__*/React.createElement("button", {className:"btn btn-green", style:{fontWeight:700}, onClick: commitImport}, "✓ Confirm Import")
     )
-  )), profileMember && (() => {
-    const pd = getProfileData(profileMember);
-    if (!pd) return null;
-    const {
-      m,
-      cat,
-      totalP: tp,
-      totalS: ts,
-      pct: pc,
-      recentP,
-      recentS,
-      recentPct,
-      sessions
-    } = pd;
-    return /*#__PURE__*/React.createElement("div", {
-      className: "modal-bg",
-      onClick: () => setProfileMember(null)
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "#fff",
-        borderRadius: 16,
-        maxWidth: 540,
-        width: "94%",
-        maxHeight: "90vh",
-        overflowY: "auto",
-        boxShadow: "0 20px 60px rgba(0,0,0,.2)"
-      },
-      onClick: e => e.stopPropagation()
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "#312e81",
-        borderRadius: "16px 16px 0 0",
-        padding: "20px 22px",
-        color: "#fff"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "space-between"
-      }
-    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 18,
-        fontWeight: 700
-      }
-    }, m.name), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#94a3b8",
-        marginTop: 2
-      }
-    }, m.followup), m.contact && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#94a3b8"
-      }
-    }, "\uD83D\uDCDE ", m.contact), m.isExtra && m.dob && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#94a3b8"
-      }
-    }, "\uD83C\uDF82 ", m.dob), (m.isExtra ? m.address : getExtra(m.name, "address")) && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#94a3b8",
-        marginTop: 2
-      }
-    }, "\uD83D\uDCCD ", m.isExtra ? m.address : getExtra(m.name, "address")), m.isExtra && m.reference && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#94a3b8"
-      }
-    }, "\uD83D\uDC64 Ref: ", m.reference)), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        gap: 6
-      }
-    }))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr 1fr 1fr",
-        gap: 0,
-        borderBottom: "1px solid #f0f0f0"
-      }
-    }, [["All-time ✅", tp, "#15803d"], [`Last ${recentS} sess`, recentP, "#1e40af"], ["Overall %", pc + "%", pc >= 70 ? "#15803d" : pc >= 40 ? "#92400e" : "#b91c1c"], ["Recent %", recentPct + "%", recentPct >= 70 ? "#15803d" : recentPct >= 40 ? "#92400e" : "#b91c1c"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
-      key: l,
-      style: {
-        padding: "14px 10px",
-        textAlign: "center",
-        borderRight: "1px solid #f0f0f0"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 9,
-        color: "#888",
-        textTransform: "uppercase",
-        letterSpacing: ".05em",
-        marginBottom: 4
-      }
-    }, l), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 20,
-        fontWeight: 700,
-        color: c
-      }
-    }, v)))), m.contact && /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "12px 22px",
-        display: "flex",
-        gap: 8,
-        borderBottom: "1px solid #f0f0f0"
-      }
-    }, /*#__PURE__*/React.createElement("a", {
-      href: `tel:${m.contact}`,
-      className: "btn btn-green",
-      style: {
-        textDecoration: "none",
-        flex: 1,
-        justifyContent: "center"
-      }
-    }, "\uD83D\uDCDE Call"), /*#__PURE__*/React.createElement("button", {
-      className: "btn btn-wa",
-      style: {
-        flex: 1
-      },
-      onClick: () => doWAAbsent(m)
-    }, "\uD83D\uDCAC WhatsApp")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "0 22px 16px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 600,
-        fontSize: 13,
-        marginBottom: 10
-      }
-    }, "\uD83D\uDDFA Category Journey"), (() => {
-      const journey = getJourney(m.name);
-      if (!journey.length) return /*#__PURE__*/React.createElement("div", {
-        style: {
-          color: "#aaa",
-          fontSize: 12
-        }
-      }, "No history yet.");
-      const catColor = {
-        R: "#15803d",
-        I: "#d97706",
-        N: "#dc2626"
-      };
-      const catLabel = {
-        R: "Regular",
-        I: "Irregular",
-        N: "No"
-      };
-      // Group consecutive same-cat segments
-      const segments = [];
-      journey.forEach((j, i) => {
-        if (!segments.length || segments[segments.length - 1].cat !== j.cat) {
-          segments.push({
-            cat: j.cat,
-            from: j.date,
-            to: j.date,
-            count: 1,
-            present: j.present ? 1 : 0
-          });
-        } else {
-          segments[segments.length - 1].to = j.date;
-          segments[segments.length - 1].count++;
-          if (j.present) segments[segments.length - 1].present++;
-        }
-      });
-      return /*#__PURE__*/React.createElement("div", {
-        style: {
-          overflowX: "auto"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          minWidth: 320,
-          gap: 0
-        }
-      }, segments.map((seg, i) => /*#__PURE__*/React.createElement("div", {
-        key: i,
-        style: {
-          flex: seg.count,
-          minWidth: 40,
-          position: "relative"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          height: 24,
-          background: catColor[seg.cat],
-          opacity: 0.85,
-          borderRadius: i === 0 ? "6px 0 0 6px" : i === segments.length - 1 ? "0 6px 6px 0" : "0",
-          margin: "0 1px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          color: "#fff",
-          fontWeight: 700
-        }
-      }, catLabel[seg.cat][0])), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 8,
-          color: "#888",
-          textAlign: "center",
-          marginTop: 2,
-          whiteSpace: "nowrap"
-        }
-      }, seg.from.split(" ").slice(0, 2).join(" "))))), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 12,
-          marginTop: 8
-        }
-      }, Object.entries(catLabel).map(([k, v]) => /*#__PURE__*/React.createElement("span", {
-        key: k,
-        style: {
-          fontSize: 10,
-          display: "flex",
-          alignItems: "center",
-          gap: 4
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          width: 10,
-          height: 10,
-          borderRadius: 2,
-          background: catColor[k],
-          display: "inline-block"
-        }
-      }), v, ": ", segments.filter(s => s.cat === k).reduce((a, s) => a + s.count, 0), " sessions"))));
-    })()), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "16px 22px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 600,
-        fontSize: 13,
-        marginBottom: 10
-      }
-    }, "Session History (most recent first)"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        maxHeight: 240,
-        overflowY: "auto"
-      }
-    }, sessions.length === 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: "#aaa",
-        fontSize: 13
-      }
-    }, "No sessions recorded yet."), sessions.map((s, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "7px 0",
-        borderBottom: "1px solid #f5f5f5"
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        minWidth: 100,
-        fontSize: 12,
-        color: "#555"
-      }
-    }, s.date), /*#__PURE__*/React.createElement("span", {
-      style: {
-        padding: "2px 8px",
-        borderRadius: 4,
-        fontSize: 11,
-        fontWeight: 600,
-        background: s.status === "P" ? "#dcfce7" : s.status === "A" ? "#fee2e2" : "#f3f4f6",
-        color: s.status === "P" ? "#15803d" : s.status === "A" ? "#b91c1c" : "#888"
-      }
-    }, s.status === "P" ? "Present" : s.status === "A" ? "Absent" : "—"), s.note && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "#888",
-        fontStyle: "italic"
-      }
-    }, "\uD83D\uDCDD ", s.note))))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "12px 22px",
-        borderTop: "1px solid #f0f0f0",
-        textAlign: "right"
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      className: "btn btn-gray",
-      onClick: () => setProfileMember(null)
-    }, "Close"))));
-  })()
-  ));
+  ))  ));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
