@@ -2494,7 +2494,7 @@ function App() {
   );
   const histRows = useMemo(() => {
     return allMembers.filter(m => m.name.toLowerCase().includes(histSearch.toLowerCase()) || m.followup.toLowerCase().includes(histSearch.toLowerCase())).map(m => {
-      const cat = calcCategory(m.name, prevHistory);
+      const cat = getCategory(m.name, prevHistory);
       const totalAtt = prevHistory.filter(s => s.records.find(r => r.name === m.name && r.status === "P")).length;
       const byDate = {};
       prevHistory.forEach(s => {
@@ -2526,7 +2526,7 @@ function App() {
       }
       return histSortDir * (typeof av === "string" ? av.localeCompare(bv) : av - bv);
     });
-  }, [prevHistory, histSearch, histSort, histSortDir, allMembers]);
+  }, [prevHistory, histSearch, histSort, histSortDir, allMembers, catOverrides]);
   const filteredHistRows = useMemo(() => { if (!histDateFilter.date || histDateFilter.status === "ALL") return histRows; return histRows.filter(r => { const s = r.byDate[histDateFilter.date]; if (histDateFilter.status === "P") return s === "P"; if (histDateFilter.status === "A") return s === "A" || !s; return true; }); }, [histRows, histDateFilter]);
   function sortHist(col) {
     if (histSort === col) setHistSortDir(d => -d);else {
@@ -3272,7 +3272,7 @@ function App() {
 
     // ── Sheet 2: Member Summary ──────────────────────────────────────────────
     var summaryRows = allMembers.map(function(m) {
-      var cat=calcCategory(m.name,prevHistory);
+      var cat=getCategory(m.name,prevHistory);
       var totalP=prevHistory.filter(function(s){return s.records.find(function(r){return r.name===m.name&&r.status==="P";});}).length;
       var totalS=prevHistory.length;
       var streak=0, maxStreak=0, curStreak=0;
@@ -3553,10 +3553,10 @@ function App() {
     // Trend: per-session totals
     const trend = last10.map(s => {
       const totalPresent = s.records.filter(r => r.status === "P").length;
-      const regPresent = s.records.filter(r => r.status === "P" && calcCategory(r.name, prevHistory) === "R").length;
-      const regAbsent = s.records.filter(r => r.status === "A" && calcCategory(r.name, prevHistory) === "R").length;
-      const irrPresent = s.records.filter(r => r.status === "P" && calcCategory(r.name, prevHistory) === "I").length;
-      const noPresent = s.records.filter(r => r.status === "P" && calcCategory(r.name, prevHistory) === "N").length;
+      const regPresent = s.records.filter(r => r.status === "P" && getCategory(r.name, prevHistory) === "R").length;
+      const regAbsent = s.records.filter(r => r.status === "A" && getCategory(r.name, prevHistory) === "R").length;
+      const irrPresent = s.records.filter(r => r.status === "P" && getCategory(r.name, prevHistory) === "I").length;
+      const noPresent = s.records.filter(r => r.status === "P" && getCategory(r.name, prevHistory) === "N").length;
       const totalMembers = allMembers.length;
       return {
         date: s.date,
@@ -3579,10 +3579,19 @@ function App() {
     const prev = trend.length > 1 ? trend[trend.length - 2] : null;
     const trend_dir = prev ? latest.totalPresent > prev.totalPresent ? 1 : latest.totalPresent < prev.totalPresent ? -1 : 0 : 0;
 
-    // Category counts live
-    const liveR = allMembers.filter(m => calcCategory(m.name, prevHistory) === "R").length;
-    const liveI = allMembers.filter(m => calcCategory(m.name, prevHistory) === "I").length;
-    const liveN = allMembers.filter(m => calcCategory(m.name, prevHistory) === "N").length;
+    // Category counts live — uses getCategory (override-aware), NOT
+    // calcCategory directly. calcCategory always recomputes from recent
+    // attendance and completely ignores catOverrides — which is exactly
+    // what Excel import sets when a category is explicitly pinned. Using
+    // it directly here meant the Dashboard's Regular/Irregular/No counts
+    // could never reflect an imported category, even right after a fresh
+    // import — it would always show the live recency-based recalculation
+    // instead, which is a different number for any member whose Excel
+    // category didn't happen to match what their recent attendance alone
+    // would produce.
+    const liveR = allMembers.filter(m => getCategory(m.name, prevHistory) === "R").length;
+    const liveI = allMembers.filter(m => getCategory(m.name, prevHistory) === "I").length;
+    const liveN = allMembers.filter(m => getCategory(m.name, prevHistory) === "N").length;
 
     // Followup Group Performance — redesigned to show, per leader:
     //   - present/total for the LATEST session only (not an average)
@@ -3653,7 +3662,7 @@ function App() {
       fpPerf,
       streak
     };
-  }, [prevHistory, allMembers, allFollowups]);
+  }, [prevHistory, allMembers, allFollowups, catOverrides]);
 
   // ── Dark mode effect ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -3792,7 +3801,7 @@ function App() {
   const regBecomingIrr = useMemo(function() {
     if (prevHistory.length < 3) return [];
     return allMembers.filter(function(m) {
-      var cat = calcCategory(m.name, prevHistory);
+      var cat = getCategory(m.name, prevHistory);
       if (cat !== "R") return false;
       var last4 = prevHistory.slice(-4).map(function(s){ var r=s.records.find(function(x){return x.name===m.name;}); return r&&r.status==="P"; });
       var attended4 = last4.filter(Boolean).length;
@@ -3802,13 +3811,13 @@ function App() {
       return { name:m.name, followup:m.followup,
         last4: prevHistory.slice(-4).map(function(s){ var r=s.records.find(function(x){return x.name===m.name;}); return r&&r.status==="P"?"P":"A"; }) };
     }).sort(function(a,b){return a.name.localeCompare(b.name);});
-  }, [prevHistory, allMembers]);
+  }, [prevHistory, allMembers, catOverrides]);
   const actionList = useMemo(() => {
     if (prevHistory.length < 2) return [];
     const prevPrev = prevHistory.length > 1 ? prevHistory.slice(0, -1) : [];
     return allMembers.map(m => {
-      const catNow = calcCategory(m.name, prevHistory);
-      const catPrev = calcCategory(m.name, prevPrev);
+      const catNow = getCategory(m.name, prevHistory);
+      const catPrev = catOverrides[m.name] || calcCategory(m.name, prevPrev);
       // Dropped category
       const dropped = catPrev === "R" && (catNow === "I" || catNow === "N") || catPrev === "I" && catNow === "N";
       // Consecutive absences
@@ -3827,7 +3836,7 @@ function App() {
         consAbsent
       } : null;
     }).filter(Boolean).sort((a, b) => a.action.localeCompare(b.action));
-  }, [prevHistory, allMembers]);
+  }, [prevHistory, allMembers, catOverrides]);
 
   // ── Year-over-Year ───────────────────────────────────────────────────────
   function parseInputDate2(s) {
@@ -3935,7 +3944,7 @@ function App() {
       var _attendance$m$name16;
       return `<tr><td>${i + 1}</td><td style="font-weight:500">${m.name}</td><td>${m.followup}</td><td>${((_attendance$m$name16 = attendance[m.name]) === null || _attendance$m$name16 === void 0 ? void 0 : _attendance$m$name16.time) || ""}</td></tr>`;
     }).join("");
-    const aRow = absent.map((m, i) => `<tr><td>${i + 1}</td><td style="font-weight:500">${m.name}</td><td>${m.followup}</td><td><span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600">${calcCategory(m.name, prevHistory) === "R" ? "REGULAR" : ""}</span></td></tr>`).join("");
+    const aRow = absent.map((m, i) => `<tr><td>${i + 1}</td><td style="font-weight:500">${m.name}</td><td>${m.followup}</td><td><span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600">${getCategory(m.name, prevHistory) === "R" ? "REGULAR" : ""}</span></td></tr>`).join("");
     const win = window.open("", "_blank", "width=900,height=750");
     win.document.write(`<!DOCTYPE html><html><head><title>Attendance Report – ${sessionDate}</title>
     <style>body{font-family:'Segoe UI',sans-serif;padding:24px;color:#1a1a1a;font-size:12px}h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:20px 0 8px;border-bottom:1px solid #eee;padding-bottom:4px}.sub{color:#666;font-size:11px;margin-bottom:16px}.stats{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}.stat{background:#f4f4f0;border-radius:8px;padding:9px 16px}.stat b{display:block;font-size:20px}table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:16px}th{background:#1a1a1a;color:#fff;padding:7px 10px;text-align:left;font-weight:500}td{padding:6px 10px;border-bottom:.5px solid #eee}tr:nth-child(even){background:#f9f9f9}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media print{@page{margin:1.2cm}body{padding:0}.no-print{display:none}}</style>
@@ -6885,10 +6894,10 @@ function App() {
     return s + (sess ? sess.records.filter(r => r.status === "P").length : 0);
   }, 0) : filteredDates.reduce((s, d) => {
     const sess = prevHistory.find(x => x.date === d);
-    return s + (sess ? sess.records.filter(r => r.status === "P" && calcCategory(r.name, prevHistory) === cat).length : 0);
+    return s + (sess ? sess.records.filter(r => r.status === "P" && getCategory(r.name, prevHistory) === cat).length : 0);
   }, 0)), filteredDates.map(d => {
     const sess = prevHistory.find(x => x.date === d);
-    const count = sess ? cat === null ? sess.records.filter(r => r.status === "P").length : sess.records.filter(r => r.status === "P" && calcCategory(r.name, prevHistory) === cat).length : 0;
+    const count = sess ? cat === null ? sess.records.filter(r => r.status === "P").length : sess.records.filter(r => r.status === "P" && getCategory(r.name, prevHistory) === cat).length : 0;
     return /*#__PURE__*/React.createElement("td", {
       key: d,
       style: {
