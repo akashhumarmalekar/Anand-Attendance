@@ -867,6 +867,15 @@ tr:hover td{background:#eff6ff !important;}
 .btn-gray:hover{background:rgba(99,102,241,.14);}
 .dark .btn-gray{background:rgba(99,102,241,.12);color:var(--text-primary);border-color:var(--glass-border);}
 .btn-purple{background:var(--purple);color:#fff;}
+
+.wa-menu-item{
+  display:block;width:100%;text-align:left;
+  padding:9px 12px;border-radius:var(--radius-sm);border:none;
+  background:transparent;cursor:pointer;transition:var(--t);
+  min-height:44px;
+}
+.wa-menu-item:hover{background:rgba(99,102,241,.08);}
+.dark .wa-menu-item:hover{background:rgba(99,102,241,.15);}
 .btn-teal{background:var(--teal);color:#fff;}
 
 /* Row action buttons (mark Present/Absent, call, WhatsApp) used throughout
@@ -1814,6 +1823,11 @@ function App() {
   function setAbsenceReason(name, reason){ if (!requireAdmin()) return; const upd={...absenceReasons,[name]:reason}; setAbsenceReasons(upd); saveAbsenceReasons(upd); }
   const [sessionStartTime, setSessionStartTime] = useState(() => fsGet("shreeji_start_time", "20:00"));
   const [showGroupedWAModal, setShowGroupedWAModal] = useState(false);
+  // Merged WhatsApp menu — replaces 3 separate buttons (WhatsApp / FP-Wise
+  // WA / Grouped WA) with one button that opens a small dropdown. None of
+  // the underlying send logic changed — this only changes how the existing
+  // doWA() / FP-Wise modal / Grouped WA modal get triggered.
+  const [showWAMenu, setShowWAMenu] = useState(false);
   // Swipe nav
   const swipeRef = useRef(null);
   const swipeStartX = useRef(null);
@@ -5587,20 +5601,42 @@ function App() {
   }, "\u2714 Submit Attendance"), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-green",
     onClick: genExcel
-  }, "\u2B07 Excel"), /*#__PURE__*/React.createElement("button", {
+  }, "\u2B07 Excel"), /*#__PURE__*/React.createElement("div", {
+    style: { position: "relative", display: "inline-block" }
+  }, /*#__PURE__*/React.createElement("button", {
     className: "btn btn-wa",
-    onClick: doWA
-  }, "\uD83D\uDCAC WhatsApp"), /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-wa",
-    style: {
-      background: "#128C7E"
-    },
-    onClick: () => setShowFPWAModal(true)
-  }, "\uD83D\uDCAC FP-Wise WA"), /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-orange",
-    title: "Grouped by follow-up person, with reasons",
-    onClick: function(){ setShowGroupedWAModal(true); }
-  }, "\uD83D\uDCCB Grouped WA"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowWAMenu(v => !v)
+  }, "\uD83D\uDCAC WhatsApp \u25BE"),
+    showWAMenu && /*#__PURE__*/React.createElement(React.Fragment, null,
+      /*#__PURE__*/React.createElement("div", {
+        style: { position: "fixed", inset: 0, zIndex: 60 },
+        onClick: () => setShowWAMenu(false)
+      }),
+      /*#__PURE__*/React.createElement("div", {
+        className: "card",
+        style: {
+          position: "absolute", top: "calc(100% + 6px)", left: 0, minWidth: 230,
+          zIndex: 61, padding: 6, boxShadow: "var(--shadow-lg)"
+        }
+      },
+        /*#__PURE__*/React.createElement("button", {
+          className: "wa-menu-item",
+          onClick: () => { setShowWAMenu(false); doWA(); }
+        }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 13 } }, "\uD83D\uDCCB Full Member List"),
+           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--text-muted)" } }, "Present / Absent / Unmarked, one message")),
+        /*#__PURE__*/React.createElement("button", {
+          className: "wa-menu-item",
+          onClick: () => { setShowWAMenu(false); setShowFPWAModal(true); }
+        }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 13 } }, "\uD83D\uDC65 Followup-wise Report"),
+           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--text-muted)" } }, "Consolidated or per-group, send individually")),
+        /*#__PURE__*/React.createElement("button", {
+          className: "wa-menu-item",
+          onClick: () => { setShowWAMenu(false); setShowGroupedWAModal(true); }
+        }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 13 } }, "\uD83D\uDCDD Grouped Absentees"),
+           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--text-muted)" } }, "By followup person, with absence reasons"))
+      )
+    )
+  ), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-blue",
     onClick: doPDF
   }, "\uD83D\uDDA8 PDF"), /*#__PURE__*/React.createElement("button", {
