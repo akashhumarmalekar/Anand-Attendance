@@ -1805,11 +1805,6 @@ function App() {
   const [monthlyFP, setMonthlyFP] = useState(restoredUI.monthlyFP || "All");
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("shreeji_dark") === "1");
-  // Year-over-year
-  const [yoyRange1From, setYoyRange1From] = useState("");
-  const [yoyRange1To, setYoyRange1To] = useState("");
-  const [yoyRange2From, setYoyRange2From] = useState("");
-  const [yoyRange2To, setYoyRange2To] = useState("");
   // Print modal
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1831,7 +1826,7 @@ function App() {
   const swipeRef = useRef(null);
   const swipeStartX = useRef(null);
   const [timeEditName, setTimeEditName] = useState(null); // which member's time is being edited
-  const TAB_ORDER = ["dashboard", "panel", "report", "history", "monthly", "action", "restructure", "yoy", "register", "edit", "excel", "settings"];
+  const TAB_ORDER = ["dashboard", "panel", "report", "history", "monthly", "action", "restructure", "register", "edit", "excel", "settings"];
 
   // ── Followup Restructuring state
   const [fpExpanded, setFPExpanded] = useState({});
@@ -3728,67 +3723,6 @@ function App() {
   }, [prevHistory, allMembers, catOverrides]);
 
   // ── Year-over-Year ───────────────────────────────────────────────────────
-  function parseInputDate2(s) {
-    if (!s) return 0;
-    const p = s.split("-");
-    return parseInt(p[0]) * 10000 + parseInt(p[1]) * 100 + parseInt(p[2]);
-  }
-  const yoyData = useMemo(() => {
-    const MONTHS = {
-      Jan: 1,
-      Feb: 2,
-      Mar: 3,
-      Apr: 4,
-      May: 5,
-      Jun: 6,
-      Jul: 7,
-      Aug: 8,
-      Sep: 9,
-      Oct: 10,
-      Nov: 11,
-      Dec: 12
-    };
-    function sessInRange(from, to) {
-      const f = parseInputDate2(from),
-        t = parseInputDate2(to);
-      return prevHistory.filter(s => {
-        const p = s.date.split(" ");
-        if (p.length !== 3) return false;
-        const v = parseInt(p[2]) * 10000 + (MONTHS[p[1]] || 0) * 100 + parseInt(p[0]);
-        return (!f || v >= f) && (!t || v <= t);
-      });
-    }
-    const r1 = sessInRange(yoyRange1From, yoyRange1To);
-    const r2 = sessInRange(yoyRange2From, yoyRange2To);
-    function stats(sessions) {
-      if (!sessions.length) return {
-        sessions: 0,
-        avgPresent: 0,
-        avgPct: 0,
-        totalSessions: 0
-      };
-      const tots = sessions.map(s => s.records.filter(r => r.status === "P").length);
-      const avg = Math.round(tots.reduce((a, b) => a + b, 0) / sessions.length);
-      return {
-        sessions: sessions.length,
-        avgPresent: avg,
-        avgPct: allMembers.length ? Math.round(avg / allMembers.length * 100) : 0,
-        totalSessions: sessions.length,
-        data: sessions.map((s, i) => ({
-          i,
-          date: s.date,
-          cnt: tots[i]
-        }))
-      };
-    }
-    return {
-      r1: stats(r1),
-      r2: stats(r2),
-      raw1: r1,
-      raw2: r2
-    };
-  }, [prevHistory, allMembers, yoyRange1From, yoyRange1To, yoyRange2From, yoyRange2To]);
-
   // ── Journey data for profile ─────────────────────────────────────────────
   function getJourney(name) {
     // Build category at each session point
@@ -4230,7 +4164,7 @@ function App() {
   // entire purpose is editing data — Followup reassignment, New Yuvak
   // registration, Edit member, Excel import, and Settings (PIN/config/
   // delete-all). Everything else (Attendance, Dashboard, Report, Historic,
-  // Monthly, Actions, Compare, Profiles) stays visible —
+  // Monthly, Actions) stays visible —
   // viewers can look at all of it, they just can't change anything.
   var ADMIN_ONLY_TABS = ['restructure', 'register', 'edit', 'excel', 'settings'];
   var ALL_TABS_FULL=[
@@ -4241,7 +4175,6 @@ function App() {
     ['monthly','📅','Monthly'],
     ['action','⚡','Actions'],
     ['restructure','🔄','Followup'],
-    ['yoy','📆','Compare'],
     ['register','➕','New Yuvak'],
     ['edit','✏️','Edit'],
     ['excel','📥','Excel'],
@@ -6571,7 +6504,10 @@ function App() {
   }, "No sessions found in this date range."), prevHistory.length > 0 && filteredDates.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
-      overflowX: "auto"
+      overflowX: "auto",
+      overflowY: "auto",
+      maxHeight: "70vh",
+      position: "relative"
     }
   }, /*#__PURE__*/React.createElement("table", {
     style: {
@@ -6833,7 +6769,10 @@ function App() {
     key: label,
     style: {
       background: bg,
-      color: "#fff"
+      color: "#fff",
+      position: "sticky",
+      bottom: 0,
+      zIndex: 3
     }
   }, /*#__PURE__*/React.createElement("td", {
     style: {
@@ -6842,23 +6781,26 @@ function App() {
       whiteSpace: "nowrap",
       position: "sticky",
       left: 0,
+      bottom: 0,
       background: bg,
-      zIndex: 1,
+      zIndex: 4,
       padding: "7px 10px"
     }
   }, label), /*#__PURE__*/React.createElement("td", {
     style: {
       position: "sticky",
       left: 180,
+      bottom: 0,
       background: bg,
-      zIndex: 1
+      zIndex: 4
     }
   }), /*#__PURE__*/React.createElement("td", {
     style: {
       position: "sticky",
       left: 310,
+      bottom: 0,
       background: bg,
-      zIndex: 1
+      zIndex: 4
     }
   }), /*#__PURE__*/React.createElement("td", {
     style: {
@@ -6867,8 +6809,9 @@ function App() {
       color,
       position: "sticky",
       left: 390,
+      bottom: 0,
       background: bg,
-      zIndex: 1
+      zIndex: 4
     }
   }, cat === null ? filteredDates.reduce((s, d) => {
     const sess = prevHistory.find(x => x.date === d);
@@ -6885,7 +6828,10 @@ function App() {
         textAlign: "center",
         fontWeight: 700,
         color,
-        fontSize: 13
+        fontSize: 13,
+        position: "sticky",
+        bottom: 0,
+        background: bg
       }
     }, count || "—");
   })))))), /*#__PURE__*/React.createElement("div", {
