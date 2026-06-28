@@ -2375,7 +2375,7 @@ function App() {
         const s = (_attendance$m$name8 = attendance[m.name]) === null || _attendance$m$name8 === void 0 ? void 0 : _attendance$m$name8.status;
         if (s === "P") {
           if (cat === "R") RP++;else if (cat === "I") IP++;else NP++;
-        } else if (s === "A") {
+        } else {
           if (cat === "R") RA++;else if (cat === "I") IA++;else NA++;
         }
       });
@@ -6136,9 +6136,11 @@ function App() {
     className: "stat-card",
     onClick: () => {
       const members = allMembers.filter(m => {
-        const s = attendance[m.name] && attendance[m.name].status;
+        const s = (attendance[m.name] && attendance[m.name].status) || null;
         const mc = getCategory(m.name, history);
-        return s === status && (cat === null || mc === cat);
+        const isPresent = s === "P";
+        const matchStatus = status === "P" ? isPresent : !isPresent;
+        return matchStatus && (cat === null || mc === cat);
       }).map(m => ({ name: m.name, sub: (fpOverrides[m.name] || m.followup) + " · " + (getCategory(m.name, history) === "R" ? "Regular" : getCategory(m.name, history) === "I" ? "Irregular" : "No") }));
       setReportModal({ title: l + " (" + v + ")", members });
     },
@@ -6171,9 +6173,11 @@ function App() {
     className: "stat-card",
     onClick: () => {
       const members = allMembers.filter(m => {
-        const s = attendance[m.name] && attendance[m.name].status;
+        const s = (attendance[m.name] && attendance[m.name].status) || null;
         const mc = getCategory(m.name, history);
-        return s === status && (cat === null || mc === cat);
+        const isPresent = s === "P";
+        const matchStatus = status === "P" ? isPresent : !isPresent;
+        return matchStatus && (cat === null || mc === cat);
       }).map(m => ({ name: m.name, sub: (fpOverrides[m.name] || m.followup) + " · " + (getCategory(m.name, history) === "R" ? "Regular" : getCategory(m.name, history) === "I" ? "Irregular" : "No") }));
       setReportModal({ title: l + " (" + v + ")", members });
     },
