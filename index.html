@@ -5973,7 +5973,8 @@ function App() {
   }, "\u2713 Mark All Present")), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
-      overflow: "hidden"
+      overflowX: "auto",
+      overflowY: "visible"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -6182,20 +6183,22 @@ function App() {
     }
   }, /*#__PURE__*/React.createElement("table", {
     style: {
-      minWidth: 700
+      width: "100%",
+      tableLayout: "auto"
     }
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
     rowSpan: 2,
     style: {
       verticalAlign: "middle",
-      minWidth: 150
+      whiteSpace: "nowrap",
+      paddingRight: 16
     }
   }, "Follow-up Group"), /*#__PURE__*/React.createElement("th", {
     rowSpan: 2,
     style: {
-      width: 55,
       verticalAlign: "middle",
-      textAlign: "center"
+      textAlign: "center",
+      whiteSpace: "nowrap"
     }
   }, "Members"), /*#__PURE__*/React.createElement("th", {
     colSpan: 4,
@@ -6215,59 +6218,67 @@ function App() {
     style: {
       background: "#166534",
       borderLeft: "2px solid #16a34a",
-      width: 75,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDFE2 Regular"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#78350f",
-      width: 75,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDFE1 Irregular"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#7f1d1d",
-      width: 55,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDD34 No"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#1e3a5f",
-      width: 60,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "Total"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#166534",
       borderLeft: "2px solid #dc2626",
-      width: 75,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDFE2 Regular"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#78350f",
-      width: 75,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDFE1 Irregular"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#7f1d1d",
-      width: 55,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDD34 No"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#374151",
-      width: 60,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "Total"))), /*#__PURE__*/React.createElement("tbody", null, reportData.rows.map(r => /*#__PURE__*/React.createElement("tr", {
     key: r.fp
@@ -6278,7 +6289,9 @@ function App() {
   }, r.fp), /*#__PURE__*/React.createElement("td", {
     style: {
       textAlign: "center",
-      color: "#666"
+      color: "#666",
+      padding: "8px 12px",
+      whiteSpace: "nowrap"
     }
   }, r.members), /*#__PURE__*/React.createElement("td", {
     style: {
