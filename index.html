@@ -6511,16 +6511,13 @@ function App() {
     }
   }, /*#__PURE__*/React.createElement("table", {
     style: {
-      minWidth: 600,
-      borderCollapse: "separate",
-      borderSpacing: 0
+      minWidth: 600
     }
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
     className: "hist-th-merged-mobile",
     style: {
       cursor: "pointer",
       position: "sticky",
-      top: 0,
       left: 0,
       zIndex: 2,
       background: "#312e81"
@@ -6534,7 +6531,6 @@ function App() {
       cursor: "pointer",
       minWidth: 180,
       position: "sticky",
-      top: 0,
       left: 0,
       zIndex: 2,
       background: "#312e81"
@@ -6546,7 +6542,6 @@ function App() {
       cursor: "pointer",
       minWidth: 130,
       position: "sticky",
-      top: 0,
       left: 180,
       zIndex: 2,
       background: "#312e81"
@@ -6558,7 +6553,6 @@ function App() {
       cursor: "pointer",
       width: 80,
       position: "sticky",
-      top: 0,
       left: 310,
       zIndex: 2,
       background: "#312e81"
@@ -6570,7 +6564,6 @@ function App() {
       cursor: "pointer",
       width: 65,
       position: "sticky",
-      top: 0,
       left: 390,
       zIndex: 2,
       background: "#312e81"
@@ -6777,9 +6770,7 @@ function App() {
     style: {
       background: bg,
       color: "#fff",
-      position: "sticky",
-      bottom: 0,
-      zIndex: 3
+      ...(cat === null ? { position: "sticky", bottom: 0, zIndex: 3 } : {})
     }
   }, /*#__PURE__*/React.createElement("td", {
     style: {
@@ -6788,7 +6779,7 @@ function App() {
       whiteSpace: "nowrap",
       position: "sticky",
       left: 0,
-      bottom: 0,
+      ...(cat === null ? { bottom: 0 } : {}),
       background: bg,
       zIndex: 4,
       padding: "7px 10px"
@@ -6797,7 +6788,7 @@ function App() {
     style: {
       position: "sticky",
       left: 180,
-      bottom: 0,
+      ...(cat === null ? { bottom: 0 } : {}),
       background: bg,
       zIndex: 4
     }
@@ -6805,7 +6796,7 @@ function App() {
     style: {
       position: "sticky",
       left: 310,
-      bottom: 0,
+      ...(cat === null ? { bottom: 0 } : {}),
       background: bg,
       zIndex: 4
     }
@@ -6816,7 +6807,7 @@ function App() {
       color,
       position: "sticky",
       left: 390,
-      bottom: 0,
+      ...(cat === null ? { bottom: 0 } : {}),
       background: bg,
       zIndex: 4
     }
@@ -6836,9 +6827,7 @@ function App() {
         fontWeight: 700,
         color,
         fontSize: 13,
-        position: "sticky",
-        bottom: 0,
-        background: bg
+        ...(cat === null ? { position: "sticky", bottom: 0, background: bg } : {})
       }
     }, count || "—");
   })))))), /*#__PURE__*/React.createElement("div", {
