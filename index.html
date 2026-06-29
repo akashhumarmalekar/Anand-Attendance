@@ -6108,8 +6108,8 @@ function App() {
 ), tab === "report" && /*#__PURE__*/React.createElement(React.Fragment, null,
   /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:10}},
     /*#__PURE__*/React.createElement("button", {className:"btn btn-wa", onClick: () => {
-      const date = currentDate || "Today";
-      const freq = frequency || "Weekly";
+      const date = sessionDate || "Today";
+      const freq = sabhaType || "Weekly";
       const groups = [...new Set(allMembers.map(m => fpOverrides[m.name] || m.followup))].sort();
       let lines = [];
       lines.push("\uD83D\uDD14 *Regular Absent \u2014 " + date + " (" + freq + ")*");
