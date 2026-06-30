@@ -704,6 +704,18 @@ button:active{transform:scale(.97);}
 }
 .tab-strip::-webkit-scrollbar{display:none;}
 .dark .tab-strip{background:var(--glass-bg-strong);border-color:var(--glass-border);}
+/* Edge fade hints — signal "more tabs this way" instead of letting the
+   row read as a wall of cramped buttons that just happens to scroll. */
+.tab-strip-wrap{position:relative;}
+.tab-strip-wrap::before,.tab-strip-wrap::after{
+  content:"";position:fixed;top:var(--navbar-h);height:var(--tabstrip-h);
+  width:18px;z-index:491;pointer-events:none;
+  transition:opacity .15s;
+}
+.tab-strip-wrap::before{left:0;background:linear-gradient(90deg,var(--glass-bg-strong),transparent);}
+.tab-strip-wrap::after{right:0;background:linear-gradient(270deg,var(--glass-bg-strong),transparent);}
+.tab-strip-wrap.at-start::before{opacity:0;}
+.tab-strip-wrap.at-end::after{opacity:0;}
 
 /* Individual tab pill */
 .tab-pill{
@@ -720,7 +732,7 @@ button:active{transform:scale(.97);}
   font-weight:500;
   color:var(--text-muted);
   position:relative;
-  transition:color .15s,background .15s;
+  transition:color .15s,background .15s,padding .15s;
   flex-shrink:0;
   user-select:none;
   -webkit-user-select:none;
@@ -747,6 +759,20 @@ button:active{transform:scale(.97);}
 .tab-pill-label{
   font-size:12.5px;
   line-height:1;
+}
+/* Icon-only compact mode on small screens — only the active tab keeps
+   its label, so the strip reads as a row of clear icons with one
+   labeled "you are here" pill, instead of 13 competing text+icon
+   chips squeezed edge to edge. */
+@media(max-width:480px){
+  .tab-pill{padding:0 11px;gap:0;}
+  .tab-pill .tab-pill-label{
+    display:none;
+    width:0;overflow:hidden;
+  }
+  .tab-pill.active{padding:0 14px;gap:6px;}
+  .tab-pill.active .tab-pill-label{display:inline;width:auto;}
+  .tab-pill-icon{font-size:16px;}
 }
 /* tiny left padding on very first pill so it doesn't butt against the edge */
 .tab-pill:first-child{margin-left:4px;}
@@ -4194,8 +4220,18 @@ function App() {
   }, [isAdmin, tab]);
 
   // Auto-scroll active tab pill into view whenever tab changes
+  var tabStripRef = React.useRef(null);
+  var [tabStripEdge, setTabStripEdge] = React.useState("start"); // "start" | "end" | "mid" — drives the fade-hint gradient on either side of the tab strip
+  var updateTabStripEdge = React.useCallback(function(){
+    var strip = tabStripRef.current;
+    if(!strip) return;
+    var atStart = strip.scrollLeft <= 2;
+    var atEnd = strip.scrollLeft + strip.offsetWidth >= strip.scrollWidth - 2;
+    setTabStripEdge(atStart ? "start" : atEnd ? "end" : "mid");
+  },[]);
+  var onTabStripScroll = updateTabStripEdge;
   React.useEffect(function(){
-    var strip = document.querySelector('.tab-strip');
+    var strip = tabStripRef.current;
     var active = strip && strip.querySelector('.tab-pill.active');
     if(active && strip){
       // Use scrollIntoView with inline:'nearest' so first tab doesn't over-scroll
@@ -4211,7 +4247,11 @@ function App() {
         strip.scrollTo({left: tabRight - strip.offsetWidth + 4, behavior:'smooth'});
       }
     }
-  },[tab]);
+    // Run once on mount and after every tab switch so the fade hint
+    // reflects reality even if the switch didn't trigger a scroll.
+    var t = setTimeout(updateTabStripEdge, 250);
+    return function(){ clearTimeout(t); };
+  },[tab, updateTabStripEdge]);
 
   return /*#__PURE__*/React.createElement("div", {
     ref: swipeRef,
@@ -4297,20 +4337,22 @@ function App() {
   ),
 
   /* ── Scrollable Tab Strip — all 15 tabs ──────────────────────────────── */
-  /*#__PURE__*/React.createElement("div",{className:"tab-strip",role:"tablist","aria-label":"Main navigation"},
-    ALL_TABS.map(function(item){
-      return /*#__PURE__*/React.createElement("button",{
-        key:item[0],
-        className:"tab-pill"+(tab===item[0]?" active":""),
-        onClick:function(){setTab(item[0]);},
-        role:"tab",
-        "aria-selected":tab===item[0],
-        "aria-label":item[2]
-      },
-        /*#__PURE__*/React.createElement("span",{className:"tab-pill-icon"},item[1]),
-        /*#__PURE__*/React.createElement("span",{className:"tab-pill-label"},item[2])
-      );
-    })
+  /*#__PURE__*/React.createElement("div",{className:"tab-strip-wrap"+(tabStripEdge==="start"?" at-start":tabStripEdge==="end"?" at-end":"")},
+    /*#__PURE__*/React.createElement("div",{className:"tab-strip",role:"tablist","aria-label":"Main navigation",onScroll:onTabStripScroll,ref:tabStripRef},
+      ALL_TABS.map(function(item){
+        return /*#__PURE__*/React.createElement("button",{
+          key:item[0],
+          className:"tab-pill"+(tab===item[0]?" active":""),
+          onClick:function(){setTab(item[0]);},
+          role:"tab",
+          "aria-selected":tab===item[0],
+          "aria-label":item[2]
+        },
+          /*#__PURE__*/React.createElement("span",{className:"tab-pill-icon"},item[1]),
+          /*#__PURE__*/React.createElement("span",{className:"tab-pill-label"},item[2])
+        );
+      })
+    )
   ),
 
   /*#__PURE__*/React.createElement("div",{className:"main-content"},
