@@ -693,6 +693,7 @@ button:active{transform:scale(.97);}
   z-index:490;
   display:flex;
   align-items:stretch;
+  justify-content:flex-start;
   overflow-x:auto;
   overflow-y:hidden;
   scroll-behavior:smooth;
@@ -702,6 +703,13 @@ button:active{transform:scale(.97);}
   /* ensure first tab never hides behind left edge */
   scroll-padding-left:0;
 }
+/* On wide screens the strip itself spans edge-to-edge (it's a toolbar,
+   matches the navbar above it) but the pills only take the width their
+   content needs — flex children don't grow to fill empty space, so 4
+   small pills + a More button stay a tight compact group on the left
+   instead of stretching into 4 oversized buttons with dead air between
+   them. */
+.tab-strip > .tab-pill,.tab-strip > .tab-more-wrap{flex-grow:0;flex-basis:auto;}
 .tab-strip::-webkit-scrollbar{display:none;}
 .dark .tab-strip{background:var(--glass-bg-strong);border-color:var(--glass-border);}
 /* Individual tab pill */
