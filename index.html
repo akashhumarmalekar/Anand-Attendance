@@ -704,19 +704,6 @@ button:active{transform:scale(.97);}
 }
 .tab-strip::-webkit-scrollbar{display:none;}
 .dark .tab-strip{background:var(--glass-bg-strong);border-color:var(--glass-border);}
-/* Edge fade hints — signal "more tabs this way" instead of letting the
-   row read as a wall of cramped buttons that just happens to scroll. */
-.tab-strip-wrap{position:relative;}
-.tab-strip-wrap::before,.tab-strip-wrap::after{
-  content:"";position:fixed;top:var(--navbar-h);height:var(--tabstrip-h);
-  width:18px;z-index:491;pointer-events:none;
-  transition:opacity .15s;
-}
-.tab-strip-wrap::before{left:0;background:linear-gradient(90deg,var(--glass-bg-strong),transparent);}
-.tab-strip-wrap::after{right:0;background:linear-gradient(270deg,var(--glass-bg-strong),transparent);}
-.tab-strip-wrap.at-start::before{opacity:0;}
-.tab-strip-wrap.at-end::after{opacity:0;}
-
 /* Individual tab pill */
 .tab-pill{
   display:inline-flex;
@@ -760,23 +747,98 @@ button:active{transform:scale(.97);}
   font-size:12.5px;
   line-height:1;
 }
-/* Icon-only compact mode on small screens — only the active tab keeps
-   its label, so the strip reads as a row of clear icons with one
-   labeled "you are here" pill, instead of 13 competing text+icon
-   chips squeezed edge to edge. */
+/* Mobile: tighten pill padding slightly so 4 primary tabs + More fit
+   comfortably without cramming, but every pill keeps its label — the
+   primary/overflow split (not label-hiding) is what solves crowding now. */
 @media(max-width:480px){
-  .tab-pill{padding:0 11px;gap:0;}
-  .tab-pill .tab-pill-label{
-    display:none;
-    width:0;overflow:hidden;
-  }
-  .tab-pill.active{padding:0 14px;gap:6px;}
-  .tab-pill.active .tab-pill-label{display:inline;width:auto;}
-  .tab-pill-icon{font-size:16px;}
+  .tab-pill{padding:0 10px;font-size:11.5px;}
+  .tab-pill-label{font-size:11.5px;}
+  .tab-pill-icon{font-size:13px;}
 }
 /* tiny left padding on very first pill so it doesn't butt against the edge */
 .tab-pill:first-child{margin-left:4px;}
 .tab-pill:last-child{margin-right:4px;}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   "MORE" TAB MENU — collapses the 7 occasional-use tabs (Monthly, Actions,
+   Followup, New Yuvak, Edit, Excel, Settings) out of the always-visible
+   strip, leaving only the 4 tabs visited every session (Attendance,
+   Dashboard, Report, Historic) as real labeled pills. Desktop gets an
+   anchored dropdown; mobile gets a bottom sheet — same data, same
+   component, just a different surface for the screen it's on.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.tab-more-wrap{position:relative;flex-shrink:0;margin-left:2px;}
+.tab-pill-more{gap:7px;}
+.tab-more-chevron{font-size:9px;margin-left:-1px;opacity:.7;}
+
+.tab-more-backdrop{
+  position:fixed;inset:0;z-index:495;
+  background:transparent;
+}
+.tab-more-panel{
+  position:fixed;
+  top:var(--header-total);
+  right:12px;
+  z-index:496;
+  background:var(--glass-bg-strong);
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  border:1px solid var(--glass-border);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-xl);
+  padding:8px;
+  min-width:220px;
+  max-width:280px;
+  animation:moreMenuIn .16s cubic-bezier(.34,1.2,.64,1);
+}
+@keyframes moreMenuIn{from{opacity:0;transform:translateY(-6px) scale(.97);}to{opacity:1;transform:none;}}
+.tab-more-panel-handle{display:none;}
+.tab-more-panel-title{
+  font-size:10.5px;font-weight:700;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.06em;
+  padding:6px 10px 8px;
+}
+.tab-more-grid{display:flex;flex-direction:column;gap:2px;}
+.tab-more-item{
+  display:flex;align-items:center;gap:10px;
+  width:100%;text-align:left;
+  padding:9px 10px;border:none;border-radius:var(--radius-sm);
+  background:transparent;cursor:pointer;
+  font-size:13.5px;font-weight:500;color:var(--text-primary);
+  transition:background .12s;
+  min-height:40px;
+}
+.tab-more-item:hover{background:var(--bg-muted);}
+.tab-more-item.active{background:var(--primary-light);color:var(--primary);font-weight:700;}
+.dark .tab-more-item.active{background:rgba(99,102,241,.18);}
+.tab-more-item-icon{font-size:16px;flex-shrink:0;width:20px;text-align:center;}
+.tab-more-item-label{flex:1;}
+
+@media(max-width:680px){
+  .tab-more-backdrop{background:rgba(30,27,75,.45);backdrop-filter:blur(2px);}
+  .tab-more-panel{
+    top:auto;bottom:0;left:0;right:0;
+    border-radius:var(--radius-xl) var(--radius-xl) 0 0;
+    max-width:none;min-width:0;
+    padding:10px 12px calc(14px + env(safe-area-inset-bottom,0px));
+    animation:moreSheetIn .2s cubic-bezier(.34,1.2,.64,1);
+    box-shadow:0 -8px 32px rgba(0,0,0,.18);
+  }
+  @keyframes moreSheetIn{from{opacity:0;transform:translateY(100%);}to{opacity:1;transform:none;}}
+  .tab-more-panel-handle{
+    display:block;width:36px;height:4px;border-radius:3px;
+    background:var(--border);margin:2px auto 10px;
+  }
+  .tab-more-panel-title{padding:0 6px 8px;}
+  .tab-more-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:6px;
+  }
+  .tab-more-item{
+    flex-direction:column;gap:6px;text-align:center;
+    padding:14px 6px;min-height:72px;justify-content:center;
+  }
+  .tab-more-item-icon{font-size:22px;width:auto;}
+  .tab-more-item-label{font-size:11px;flex:none;}
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN CONTENT
@@ -4220,38 +4282,17 @@ function App() {
   }, [isAdmin, tab]);
 
   // Auto-scroll active tab pill into view whenever tab changes
-  var tabStripRef = React.useRef(null);
-  var [tabStripEdge, setTabStripEdge] = React.useState("start"); // "start" | "end" | "mid" — drives the fade-hint gradient on either side of the tab strip
-  var updateTabStripEdge = React.useCallback(function(){
-    var strip = tabStripRef.current;
-    if(!strip) return;
-    var atStart = strip.scrollLeft <= 2;
-    var atEnd = strip.scrollLeft + strip.offsetWidth >= strip.scrollWidth - 2;
-    setTabStripEdge(atStart ? "start" : atEnd ? "end" : "mid");
-  },[]);
-  var onTabStripScroll = updateTabStripEdge;
-  React.useEffect(function(){
-    var strip = tabStripRef.current;
-    var active = strip && strip.querySelector('.tab-pill.active');
-    if(active && strip){
-      // Use scrollIntoView with inline:'nearest' so first tab doesn't over-scroll
-      var tabLeft = active.offsetLeft;
-      var tabRight = tabLeft + active.offsetWidth;
-      var stripLeft = strip.scrollLeft;
-      var stripRight = stripLeft + strip.offsetWidth;
-      if(tabLeft < stripLeft){
-        // Tab is hidden to the left — scroll it into view from left edge
-        strip.scrollTo({left: tabLeft - 4, behavior:'smooth'});
-      } else if(tabRight > stripRight){
-        // Tab is hidden to the right — scroll it into view
-        strip.scrollTo({left: tabRight - strip.offsetWidth + 4, behavior:'smooth'});
-      }
-    }
-    // Run once on mount and after every tab switch so the fade hint
-    // reflects reality even if the switch didn't trigger a scroll.
-    var t = setTimeout(updateTabStripEdge, 250);
-    return function(){ clearTimeout(t); };
-  },[tab, updateTabStripEdge]);
+  // Primary tabs stay pinned in the strip at all times — the 4 destinations
+  // visited every single session. Everything else (admin/management tools
+  // used occasionally) collapses into the "More" menu so the strip never
+  // turns into a wall of competing icons again. The split is structural,
+  // not a screen-width hack, so desktop and mobile share one mental model.
+  var PRIMARY_TAB_KEYS = ["panel", "dashboard", "report", "history"];
+  var primaryTabs = ALL_TABS.filter(function(item){ return PRIMARY_TAB_KEYS.indexOf(item[0]) !== -1; });
+  var overflowTabs = ALL_TABS.filter(function(item){ return PRIMARY_TAB_KEYS.indexOf(item[0]) === -1; });
+  var activeIsOverflow = overflowTabs.some(function(item){ return item[0] === tab; });
+  var [moreMenuOpen, setMoreMenuOpen] = React.useState(false);
+  React.useEffect(function(){ setMoreMenuOpen(false); }, [tab]);
 
   return /*#__PURE__*/React.createElement("div", {
     ref: swipeRef,
@@ -4337,21 +4378,59 @@ function App() {
   ),
 
   /* ── Scrollable Tab Strip — all 15 tabs ──────────────────────────────── */
-  /*#__PURE__*/React.createElement("div",{className:"tab-strip-wrap"+(tabStripEdge==="start"?" at-start":tabStripEdge==="end"?" at-end":"")},
-    /*#__PURE__*/React.createElement("div",{className:"tab-strip",role:"tablist","aria-label":"Main navigation",onScroll:onTabStripScroll,ref:tabStripRef},
-      ALL_TABS.map(function(item){
-        return /*#__PURE__*/React.createElement("button",{
-          key:item[0],
-          className:"tab-pill"+(tab===item[0]?" active":""),
-          onClick:function(){setTab(item[0]);},
-          role:"tab",
-          "aria-selected":tab===item[0],
-          "aria-label":item[2]
-        },
-          /*#__PURE__*/React.createElement("span",{className:"tab-pill-icon"},item[1]),
-          /*#__PURE__*/React.createElement("span",{className:"tab-pill-label"},item[2])
-        );
-      })
+  /*#__PURE__*/React.createElement("div", {className:"tab-strip", role:"tablist", "aria-label":"Main navigation"},
+    primaryTabs.map(function(item){
+      return /*#__PURE__*/React.createElement("button",{
+        key:item[0],
+        className:"tab-pill"+(tab===item[0]?" active":""),
+        onClick:function(){setTab(item[0]);},
+        role:"tab",
+        "aria-selected":tab===item[0],
+        "aria-label":item[2]
+      },
+        /*#__PURE__*/React.createElement("span",{className:"tab-pill-icon"},item[1]),
+        /*#__PURE__*/React.createElement("span",{className:"tab-pill-label"},item[2])
+      );
+    }),
+    overflowTabs.length > 0 && /*#__PURE__*/React.createElement("div", {className:"tab-more-wrap"},
+      /*#__PURE__*/React.createElement("button",{
+        className:"tab-pill tab-pill-more"+(activeIsOverflow?" active":""),
+        onClick:function(){ setMoreMenuOpen(function(v){ return !v; }); },
+        "aria-haspopup":"true",
+        "aria-expanded":moreMenuOpen,
+        "aria-label":"More tabs"
+      },
+        activeIsOverflow
+          ? /*#__PURE__*/React.createElement(React.Fragment, null,
+              /*#__PURE__*/React.createElement("span",{className:"tab-pill-icon"}, (overflowTabs.find(function(i){return i[0]===tab;}) || [,"\u2022"])[1]),
+              /*#__PURE__*/React.createElement("span",{className:"tab-pill-label"}, (overflowTabs.find(function(i){return i[0]===tab;}) || [,, "More"])[2])
+            )
+          : /*#__PURE__*/React.createElement(React.Fragment, null,
+              /*#__PURE__*/React.createElement("span",{className:"tab-pill-icon"}, "\u2022\u2022\u2022"),
+              /*#__PURE__*/React.createElement("span",{className:"tab-pill-label"}, "More")
+            ),
+        /*#__PURE__*/React.createElement("span",{className:"tab-more-chevron"}, moreMenuOpen ? "\u25b4" : "\u25be")
+      )
+    )
+  ),
+  moreMenuOpen && /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement("div",{className:"tab-more-backdrop", onClick:function(){setMoreMenuOpen(false);}}),
+    /*#__PURE__*/React.createElement("div",{className:"tab-more-panel", role:"menu", "aria-label":"More tabs"},
+      /*#__PURE__*/React.createElement("div",{className:"tab-more-panel-handle"}),
+      /*#__PURE__*/React.createElement("div",{className:"tab-more-panel-title"}, "More"),
+      /*#__PURE__*/React.createElement("div",{className:"tab-more-grid"},
+        overflowTabs.map(function(item){
+          return /*#__PURE__*/React.createElement("button",{
+            key:item[0],
+            className:"tab-more-item"+(tab===item[0]?" active":""),
+            role:"menuitem",
+            onClick:function(){ setTab(item[0]); setMoreMenuOpen(false); }
+          },
+            /*#__PURE__*/React.createElement("span",{className:"tab-more-item-icon"}, item[1]),
+            /*#__PURE__*/React.createElement("span",{className:"tab-more-item-label"}, item[2])
+          );
+        })
+      )
     )
   ),
 
