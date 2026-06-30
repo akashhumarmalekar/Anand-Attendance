@@ -609,19 +609,15 @@ button:active{transform:scale(.97);}
   font-family:inherit;
   font-size:11.5px;
   padding:5px 8px;
-  border-radius:var(--radius-sm);
-  border:1px solid rgba(255,255,255,.28);
-  background:rgba(255,255,255,.14);
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-  color:#fff;
+  border-radius:7px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.08);
+  color:#e2e8f0;
   height:30px;
   cursor:pointer;
   transition:var(--t);
   min-width:0;
-  box-shadow:0 1px 4px rgba(0,0,0,.06),inset 0 1px 0 rgba(255,255,255,.1);
 }
-.navbar-session input:hover,
-.navbar-session select:hover{background:rgba(255,255,255,.2);}
 .navbar-session input{width:108px;flex-shrink:0;}
 .navbar-session select{flex:1;max-width:130px;}
 .navbar-session input:focus,
@@ -641,21 +637,18 @@ button:active{transform:scale(.97);}
   flex-shrink:0;
 }
 .navbar-btn{
-  width:38px;height:38px;
-  border-radius:var(--radius-sm);
-  border:1px solid rgba(255,255,255,.3);
-  background:rgba(255,255,255,.16);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  color:#fff;
+  width:32px;height:32px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,.11);
+  background:rgba(255,255,255,.07);
+  color:#e2e8f0;
   cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  font-size:15px;
+  font-size:14px;
   transition:var(--t);
   flex-shrink:0;
-  box-shadow:0 2px 6px rgba(0,0,0,.08),inset 0 1px 0 rgba(255,255,255,.15);
 }
-.navbar-btn:hover{background:rgba(255,255,255,.26);border-color:rgba(255,255,255,.4);transform:translateY(-1px);}
-.navbar-btn:active{transform:translateY(0) scale(.95);}
+.navbar-btn:hover{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.24);}
 
 @media(max-width:680px){
   :root{ --navbar-h:var(--navbar-h-mobile); }
@@ -700,6 +693,7 @@ button:active{transform:scale(.97);}
   z-index:490;
   display:flex;
   align-items:stretch;
+  justify-content:flex-start;
   overflow-x:auto;
   overflow-y:hidden;
   scroll-behavior:smooth;
@@ -709,15 +703,21 @@ button:active{transform:scale(.97);}
   /* ensure first tab never hides behind left edge */
   scroll-padding-left:0;
 }
+/* On wide screens the strip itself spans edge-to-edge (it's a toolbar,
+   matches the navbar above it) but the pills only take the width their
+   content needs — flex children don't grow to fill empty space, so 4
+   small pills + a More button stay a tight compact group on the left
+   instead of stretching into 4 oversized buttons with dead air between
+   them. */
+.tab-strip > .tab-pill,.tab-strip > .tab-more-wrap{flex-grow:0;flex-basis:auto;}
 .tab-strip::-webkit-scrollbar{display:none;}
 .dark .tab-strip{background:var(--glass-bg-strong);border-color:var(--glass-border);}
-
 /* Individual tab pill */
 .tab-pill{
   display:inline-flex;
   align-items:center;
   gap:5px;
-  padding:0 14px;
+  padding:0 13px;
   height:100%;
   border:none;
   background:transparent;
@@ -727,24 +727,18 @@ button:active{transform:scale(.97);}
   font-weight:500;
   color:var(--text-muted);
   position:relative;
-  transition:color .15s,background .15s;
+  transition:color .15s,background .15s,padding .15s;
   flex-shrink:0;
   user-select:none;
   -webkit-user-select:none;
-}
-.tab-pill::after{
-  content:"";
-  position:absolute;left:10px;right:10px;bottom:0;
-  height:3px;border-radius:3px 3px 0 0;
-  background:var(--primary);
-  transform:scaleX(0);transition:transform .18s ease;
+  border-bottom:2.5px solid transparent;
 }
 .tab-pill.active{
   color:var(--primary);
   font-weight:700;
+  border-bottom-color:var(--primary);
   background:var(--primary-light);
 }
-.tab-pill.active::after{transform:scaleX(1);}
 .dark .tab-pill.active{
   background:rgba(99,102,241,.18);
 }
@@ -761,9 +755,98 @@ button:active{transform:scale(.97);}
   font-size:12.5px;
   line-height:1;
 }
+/* Mobile: tighten pill padding slightly so 4 primary tabs + More fit
+   comfortably without cramming, but every pill keeps its label — the
+   primary/overflow split (not label-hiding) is what solves crowding now. */
+@media(max-width:480px){
+  .tab-pill{padding:0 10px;font-size:11.5px;}
+  .tab-pill-label{font-size:11.5px;}
+  .tab-pill-icon{font-size:13px;}
+}
 /* tiny left padding on very first pill so it doesn't butt against the edge */
 .tab-pill:first-child{margin-left:4px;}
 .tab-pill:last-child{margin-right:4px;}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   "MORE" TAB MENU — collapses the 7 occasional-use tabs (Monthly, Actions,
+   Followup, New Yuvak, Edit, Excel, Settings) out of the always-visible
+   strip, leaving only the 4 tabs visited every session (Attendance,
+   Dashboard, Report, Historic) as real labeled pills. Desktop gets an
+   anchored dropdown; mobile gets a bottom sheet — same data, same
+   component, just a different surface for the screen it's on.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.tab-more-wrap{position:relative;flex-shrink:0;margin-left:2px;}
+.tab-pill-more{gap:7px;}
+.tab-more-chevron{font-size:9px;margin-left:-1px;opacity:.7;}
+
+.tab-more-backdrop{
+  position:fixed;inset:0;z-index:495;
+  background:transparent;
+}
+.tab-more-panel{
+  position:fixed;
+  top:var(--header-total);
+  right:12px;
+  z-index:496;
+  background:var(--glass-bg-strong);
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  border:1px solid var(--glass-border);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-xl);
+  padding:8px;
+  min-width:220px;
+  max-width:280px;
+  animation:moreMenuIn .16s cubic-bezier(.34,1.2,.64,1);
+}
+@keyframes moreMenuIn{from{opacity:0;transform:translateY(-6px) scale(.97);}to{opacity:1;transform:none;}}
+.tab-more-panel-handle{display:none;}
+.tab-more-panel-title{
+  font-size:10.5px;font-weight:700;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.06em;
+  padding:6px 10px 8px;
+}
+.tab-more-grid{display:flex;flex-direction:column;gap:2px;}
+.tab-more-item{
+  display:flex;align-items:center;gap:10px;
+  width:100%;text-align:left;
+  padding:9px 10px;border:none;border-radius:var(--radius-sm);
+  background:transparent;cursor:pointer;
+  font-size:13.5px;font-weight:500;color:var(--text-primary);
+  transition:background .12s;
+  min-height:40px;
+}
+.tab-more-item:hover{background:var(--bg-muted);}
+.tab-more-item.active{background:var(--primary-light);color:var(--primary);font-weight:700;}
+.dark .tab-more-item.active{background:rgba(99,102,241,.18);}
+.tab-more-item-icon{font-size:16px;flex-shrink:0;width:20px;text-align:center;}
+.tab-more-item-label{flex:1;}
+
+@media(max-width:680px){
+  .tab-more-backdrop{background:rgba(30,27,75,.45);backdrop-filter:blur(2px);}
+  .tab-more-panel{
+    top:auto;bottom:0;left:0;right:0;
+    border-radius:var(--radius-xl) var(--radius-xl) 0 0;
+    max-width:none;min-width:0;
+    padding:10px 12px calc(14px + env(safe-area-inset-bottom,0px));
+    animation:moreSheetIn .2s cubic-bezier(.34,1.2,.64,1);
+    box-shadow:0 -8px 32px rgba(0,0,0,.18);
+  }
+  @keyframes moreSheetIn{from{opacity:0;transform:translateY(100%);}to{opacity:1;transform:none;}}
+  .tab-more-panel-handle{
+    display:block;width:36px;height:4px;border-radius:3px;
+    background:var(--border);margin:2px auto 10px;
+  }
+  .tab-more-panel-title{padding:0 6px 8px;}
+  .tab-more-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:6px;
+  }
+  .tab-more-item{
+    flex-direction:column;gap:6px;text-align:center;
+    padding:14px 6px;min-height:72px;justify-content:center;
+  }
+  .tab-more-item-icon{font-size:22px;width:auto;}
+  .tab-more-item-label{font-size:11px;flex:none;}
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN CONTENT
@@ -1778,6 +1861,8 @@ function App() {
   const restoredUI = restoreUIState();
   const [tab, setTab] = useState(restoredUI.tab || "panel");
   const [panelSubTab, setPanelSubTab] = useState(restoredUI.panelSubTab || "all");
+  const [dashModal, setDashModal] = useState(null); // {title, members:[{name,sub}]}
+  const [reportModal, setReportModal] = useState(null); // {title, members:[{name,sub}]}
   const [attendance, setAttendance] = useState(loadAtt);
   const [history, setHistory] = useState(loadHist);
   const [extraMembers, setExtraMembers] = useState(loadMembers);
@@ -1804,8 +1889,6 @@ function App() {
   const [histTo, setHistTo] = useState(restoredUI.histTo || ""); const [histDateFilter, setHistDateFilter] = useState(restoredUI.histDateFilter || {date: null, status: "ALL"});
   const [histEditCell, setHistEditCell] = useState(null);
   const [deleteHistDate, setDeleteHistDate] = useState(null);
-  // Profile drawer
-  const [profileMember, setProfileMember] = useState(null);
   // PIN lock
   const [pin, setPin] = useState(loadPin);
   const [pinInput, setPinInput] = useState("");
@@ -1819,11 +1902,6 @@ function App() {
   const [monthlyFP, setMonthlyFP] = useState(restoredUI.monthlyFP || "All");
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("shreeji_dark") === "1");
-  // Year-over-year
-  const [yoyRange1From, setYoyRange1From] = useState("");
-  const [yoyRange1To, setYoyRange1To] = useState("");
-  const [yoyRange2From, setYoyRange2From] = useState("");
-  const [yoyRange2To, setYoyRange2To] = useState("");
   // Print modal
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1845,7 +1923,7 @@ function App() {
   const swipeRef = useRef(null);
   const swipeStartX = useRef(null);
   const [timeEditName, setTimeEditName] = useState(null); // which member's time is being edited
-  const TAB_ORDER = ["dashboard", "panel", "report", "history", "monthly", "action", "restructure", "followupscore", "yoy", "register", "edit", "profiles", "excel", "settings"];
+  const TAB_ORDER = ["dashboard", "panel", "report", "history", "monthly", "action", "restructure", "register", "edit", "excel", "settings"];
 
   // ── Followup Restructuring state
   const [fpExpanded, setFPExpanded] = useState({});
@@ -1869,11 +1947,6 @@ function App() {
   const [editTarget, setEditTarget] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [editDeleteConfirm, setEditDeleteConfirm] = useState(null);
-  // ── Profiles tab state
-  const [profileSearch, setProfileSearch] = useState(restoredUI.profileSearch || "");
-  const [profileFPFilter, setProfileFPFilter] = useState(restoredUI.profileFPFilter || "All");
-  const [profileEditTarget, setProfileEditTarget] = useState(null);
-  const [profileEditForm, setProfileEditForm] = useState(null);
   // ── Reference overrides (for MASTER members that don't have reference in their object)
   const LS_REFOV = "shreeji_ref_overrides";
   const [referenceOverrides, setReferenceOverrides] = useState(function() {
@@ -2398,7 +2471,7 @@ function App() {
         const s = (_attendance$m$name8 = attendance[m.name]) === null || _attendance$m$name8 === void 0 ? void 0 : _attendance$m$name8.status;
         if (s === "P") {
           if (cat === "R") RP++;else if (cat === "I") IP++;else NP++;
-        } else if (s === "A") {
+        } else {
           if (cat === "R") RA++;else if (cat === "I") IA++;else NA++;
         }
       });
@@ -2778,57 +2851,6 @@ function App() {
     return "Never";
   }
 
-  // ── Profile tab edit helpers ──────────────────────────────────────────────
-  function openProfileEdit(m) {
-    const fp = fpOverrides[m.name] || m.followup;
-    const contact = m.isExtra ? m.contact : (getExtra(m.name, "contact") || m.contact || "");
-    setProfileEditTarget(m);
-    setProfileEditForm({
-      fullName: m.name,
-      followup: fp,
-      contact: contact,
-      cat: catOverrides[m.name] || "auto"
-    });
-  }
-  function saveProfileEdit() {
-    if (!requireAdmin()) return;
-    if (!profileEditForm || !profileEditTarget) return;
-    const oldName = profileEditTarget.name;
-    const newName = profileEditForm.fullName.trim();
-    if (!newName) { toast_("Name cannot be empty", "error"); return; }
-    // Category override
-    const newCat = {...catOverrides};
-    if (profileEditForm.cat === "auto") delete newCat[newName]; else newCat[newName] = profileEditForm.cat;
-    // If name changed, also move old cat key
-    if (newName !== oldName) { delete newCat[oldName]; if (profileEditForm.cat !== "auto") newCat[newName] = profileEditForm.cat; }
-    setCatOverrides(newCat); saveCatOv(newCat);
-    // Followup override
-    const newOv = {...fpOverrides};
-    if (profileEditForm.followup !== profileEditTarget.followup) newOv[newName] = profileEditForm.followup;
-    else delete newOv[newName];
-    // Contact
-    if (!profileEditTarget.isExtra) {
-      newOv[`${newName}__contact`] = profileEditForm.contact;
-    }
-    if (newName !== oldName) {
-      delete newOv[oldName]; delete newOv[`${oldName}__contact`];
-      // rename attendance
-      const newAtt = {...attendance};
-      if (newAtt[oldName]) { newAtt[newName] = newAtt[oldName]; delete newAtt[oldName]; }
-      setAttendance(newAtt); saveAtt(newAtt);
-      // rename history
-      const newHist = history.map(s => ({...s, records: s.records.map(r => r.name === oldName ? {...r, name: newName} : r)}));
-      setHistory(newHist); saveHist(newHist);
-    }
-    if (profileEditTarget.isExtra) {
-      const upd = extraMembers.map(m => m.name === oldName ? {...m, name: newName, contact: profileEditForm.contact, followup: profileEditForm.followup} : m);
-      setExtraMembers(upd); saveMembers(upd);
-    }
-    setFPOverrides(newOv); saveFPOverrides(newOv);
-    setProfileEditTarget(null); setProfileEditForm(null);
-    toast_(`${newName} profile updated!`);
-  }
-
   // ── Historic date range helpers ───────────────────────────────────────────
   // Parse "02 May 2025" style dates to comparable YYYYMMDD numbers
   const MONTHS = {
@@ -3017,38 +3039,6 @@ function App() {
     msg += `📈 *Attendance: ${pct2}%*`;
     return msg;
   }
-  // ── Live Regular-Absent report, grouped by followup leader, with
-  // contact numbers — built from the SAME regularAbsent list already
-  // powering the Attendance panel's "Regular Absent" subtab, so this is
-  // always in sync with what's on screen, not a separate recomputation.
-  function buildRegularAbsentByFPMsg() {
-    let msg = `🙏 *|| Akshar Anand ||*\n`;
-    msg += `🔴 *Regular Yuvaks Absent — ${sessionDate}*\n`;
-    msg += `━━━━━━━━━━━━━━━━━\n\n`;
-    if (regularAbsent.length === 0) {
-      msg += `✅ All Regular yuvaks are present today!`;
-      return msg;
-    }
-    const byFP = {};
-    regularAbsent.forEach(m => {
-      const fp = m.followup || "Unassigned";
-      (byFP[fp] = byFP[fp] || []).push(m);
-    });
-    Object.keys(byFP).sort().forEach(fp => {
-      msg += `👤 *${fp}* (${byFP[fp].length})\n`;
-      byFP[fp].forEach(m => {
-        msg += `• ${m.name}${m.contact ? ` — ${m.contact}` : ""}\n`;
-      });
-      msg += `\n`;
-    });
-    msg += `Total: ${regularAbsent.length} Regular yuvak${regularAbsent.length !== 1 ? "s" : ""} absent`;
-    return msg;
-  }
-  function doShareRegularAbsentByFP() {
-    const msg = buildRegularAbsentByFPMsg();
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
-  }
-
   function doWAFollowup(fp, coordinatorContact) {
     const msg = buildFPMsg(fp);
     const encoded = encodeURIComponent(msg);
@@ -3488,60 +3478,6 @@ function App() {
     }).sort((a, b) => b.totalP - a.totalP).slice(0, 10);
   }, [prevHistory, allMembers]);
 
-  // ── Individual profile data ───────────────────────────────────────────────
-  function getProfileData(name) {
-    const m = allMembers.find(x => x.name === name);
-    if (!m) return null;
-    const cat = getCategory(name, prevHistory);
-    const totalP = prevHistory.filter(s => s.records.find(r => r.name === name && r.status === "P")).length;
-    const totalS = prevHistory.length;
-    const pct = totalS > 0 ? Math.round(totalP / totalS * 100) : 0;
-    // Last 3 months
-    const now = new Date();
-    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-    const recent = prevHistory.filter(s => {
-      const parts = s.date.split(" ");
-      if (parts.length !== 3) return false;
-      const MONTHS2 = {
-        Jan: 0,
-        Feb: 1,
-        Mar: 2,
-        Apr: 3,
-        May: 4,
-        Jun: 5,
-        Jul: 6,
-        Aug: 7,
-        Sep: 8,
-        Oct: 9,
-        Nov: 10,
-        Dec: 11
-      };
-      const d = new Date(parseInt(parts[2]), MONTHS2[parts[1]], parseInt(parts[0]));
-      return d >= threeMonthsAgo;
-    });
-    const recentP = recent.filter(s => s.records.find(r => r.name === name && r.status === "P")).length;
-    const recentPct = recent.length > 0 ? Math.round(recentP / recent.length * 100) : 0;
-    const sessions = prevHistory.map(s => {
-      var _s$records$find;
-      return {
-        date: s.date,
-        status: ((_s$records$find = s.records.find(r => r.name === name)) === null || _s$records$find === void 0 ? void 0 : _s$records$find.status) || null,
-        note: s.note
-      };
-    }).reverse();
-    return {
-      m,
-      cat,
-      totalP,
-      totalS,
-      pct,
-      recentP,
-      recentS: recent.length,
-      recentPct,
-      sessions
-    };
-  }
-
   // ── Backup & Restore ─────────────────────────────────────────────────────
   function doBackup() {
     const data = {
@@ -3732,12 +3668,12 @@ function App() {
     saveUIState({
       tab, panelSubTab, search, filterFP,
       histSearch, histSort, histSortDir, histFrom, histTo, histDateFilter,
-      monthlyFP, editSearch, editFilter, profileSearch, profileFPFilter
+      monthlyFP, editSearch, editFilter
     });
   }, [
     tab, panelSubTab, search, filterFP,
     histSearch, histSort, histSortDir, histFrom, histTo, histDateFilter,
-    monthlyFP, editSearch, editFilter, profileSearch, profileFPFilter
+    monthlyFP, editSearch, editFilter
   ]);
 
   // ── Scroll position persistence ──────────────────────────────────────────
@@ -3884,67 +3820,6 @@ function App() {
   }, [prevHistory, allMembers, catOverrides]);
 
   // ── Year-over-Year ───────────────────────────────────────────────────────
-  function parseInputDate2(s) {
-    if (!s) return 0;
-    const p = s.split("-");
-    return parseInt(p[0]) * 10000 + parseInt(p[1]) * 100 + parseInt(p[2]);
-  }
-  const yoyData = useMemo(() => {
-    const MONTHS = {
-      Jan: 1,
-      Feb: 2,
-      Mar: 3,
-      Apr: 4,
-      May: 5,
-      Jun: 6,
-      Jul: 7,
-      Aug: 8,
-      Sep: 9,
-      Oct: 10,
-      Nov: 11,
-      Dec: 12
-    };
-    function sessInRange(from, to) {
-      const f = parseInputDate2(from),
-        t = parseInputDate2(to);
-      return prevHistory.filter(s => {
-        const p = s.date.split(" ");
-        if (p.length !== 3) return false;
-        const v = parseInt(p[2]) * 10000 + (MONTHS[p[1]] || 0) * 100 + parseInt(p[0]);
-        return (!f || v >= f) && (!t || v <= t);
-      });
-    }
-    const r1 = sessInRange(yoyRange1From, yoyRange1To);
-    const r2 = sessInRange(yoyRange2From, yoyRange2To);
-    function stats(sessions) {
-      if (!sessions.length) return {
-        sessions: 0,
-        avgPresent: 0,
-        avgPct: 0,
-        totalSessions: 0
-      };
-      const tots = sessions.map(s => s.records.filter(r => r.status === "P").length);
-      const avg = Math.round(tots.reduce((a, b) => a + b, 0) / sessions.length);
-      return {
-        sessions: sessions.length,
-        avgPresent: avg,
-        avgPct: allMembers.length ? Math.round(avg / allMembers.length * 100) : 0,
-        totalSessions: sessions.length,
-        data: sessions.map((s, i) => ({
-          i,
-          date: s.date,
-          cnt: tots[i]
-        }))
-      };
-    }
-    return {
-      r1: stats(r1),
-      r2: stats(r2),
-      raw1: r1,
-      raw2: r2
-    };
-  }, [prevHistory, allMembers, yoyRange1From, yoyRange1To, yoyRange2From, yoyRange2To]);
-
   // ── Journey data for profile ─────────────────────────────────────────────
   function getJourney(name) {
     // Build category at each session point
@@ -4386,7 +4261,7 @@ function App() {
   // entire purpose is editing data — Followup reassignment, New Yuvak
   // registration, Edit member, Excel import, and Settings (PIN/config/
   // delete-all). Everything else (Attendance, Dashboard, Report, Historic,
-  // Monthly, Actions, Followup Score, Compare, Profiles) stays visible —
+  // Monthly, Actions) stays visible —
   // viewers can look at all of it, they just can't change anything.
   var ADMIN_ONLY_TABS = ['restructure', 'register', 'edit', 'excel', 'settings'];
   var ALL_TABS_FULL=[
@@ -4397,11 +4272,8 @@ function App() {
     ['monthly','📅','Monthly'],
     ['action','⚡','Actions'],
     ['restructure','🔄','Followup'],
-    ['followupscore','🏆','Followup Score'],
-    ['yoy','📆','Compare'],
     ['register','➕','New Yuvak'],
     ['edit','✏️','Edit'],
-    ['profiles','👤','Profiles'],
     ['excel','📥','Excel'],
     ['settings','⚙️','Settings'],
   ];
@@ -4418,24 +4290,17 @@ function App() {
   }, [isAdmin, tab]);
 
   // Auto-scroll active tab pill into view whenever tab changes
-  React.useEffect(function(){
-    var strip = document.querySelector('.tab-strip');
-    var active = strip && strip.querySelector('.tab-pill.active');
-    if(active && strip){
-      // Use scrollIntoView with inline:'nearest' so first tab doesn't over-scroll
-      var tabLeft = active.offsetLeft;
-      var tabRight = tabLeft + active.offsetWidth;
-      var stripLeft = strip.scrollLeft;
-      var stripRight = stripLeft + strip.offsetWidth;
-      if(tabLeft < stripLeft){
-        // Tab is hidden to the left — scroll it into view from left edge
-        strip.scrollTo({left: tabLeft - 4, behavior:'smooth'});
-      } else if(tabRight > stripRight){
-        // Tab is hidden to the right — scroll it into view
-        strip.scrollTo({left: tabRight - strip.offsetWidth + 4, behavior:'smooth'});
-      }
-    }
-  },[tab]);
+  // Primary tabs stay pinned in the strip at all times — the 4 destinations
+  // visited every single session. Everything else (admin/management tools
+  // used occasionally) collapses into the "More" menu so the strip never
+  // turns into a wall of competing icons again. The split is structural,
+  // not a screen-width hack, so desktop and mobile share one mental model.
+  var PRIMARY_TAB_KEYS = ["panel", "dashboard", "report", "history"];
+  var primaryTabs = ALL_TABS.filter(function(item){ return PRIMARY_TAB_KEYS.indexOf(item[0]) !== -1; });
+  var overflowTabs = ALL_TABS.filter(function(item){ return PRIMARY_TAB_KEYS.indexOf(item[0]) === -1; });
+  var activeIsOverflow = overflowTabs.some(function(item){ return item[0] === tab; });
+  var [moreMenuOpen, setMoreMenuOpen] = React.useState(false);
+  React.useEffect(function(){ setMoreMenuOpen(false); }, [tab]);
 
   return /*#__PURE__*/React.createElement("div", {
     ref: swipeRef,
@@ -4521,8 +4386,8 @@ function App() {
   ),
 
   /* ── Scrollable Tab Strip — all 15 tabs ──────────────────────────────── */
-  /*#__PURE__*/React.createElement("div",{className:"tab-strip",role:"tablist","aria-label":"Main navigation"},
-    ALL_TABS.map(function(item){
+  /*#__PURE__*/React.createElement("div", {className:"tab-strip", role:"tablist", "aria-label":"Main navigation"},
+    primaryTabs.map(function(item){
       return /*#__PURE__*/React.createElement("button",{
         key:item[0],
         className:"tab-pill"+(tab===item[0]?" active":""),
@@ -4534,7 +4399,47 @@ function App() {
         /*#__PURE__*/React.createElement("span",{className:"tab-pill-icon"},item[1]),
         /*#__PURE__*/React.createElement("span",{className:"tab-pill-label"},item[2])
       );
-    })
+    }),
+    overflowTabs.length > 0 && /*#__PURE__*/React.createElement("div", {className:"tab-more-wrap"},
+      /*#__PURE__*/React.createElement("button",{
+        className:"tab-pill tab-pill-more"+(activeIsOverflow?" active":""),
+        onClick:function(){ setMoreMenuOpen(function(v){ return !v; }); },
+        "aria-haspopup":"true",
+        "aria-expanded":moreMenuOpen,
+        "aria-label":"More tabs"
+      },
+        activeIsOverflow
+          ? /*#__PURE__*/React.createElement(React.Fragment, null,
+              /*#__PURE__*/React.createElement("span",{className:"tab-pill-icon"}, (overflowTabs.find(function(i){return i[0]===tab;}) || [,"\u2022"])[1]),
+              /*#__PURE__*/React.createElement("span",{className:"tab-pill-label"}, (overflowTabs.find(function(i){return i[0]===tab;}) || [,, "More"])[2])
+            )
+          : /*#__PURE__*/React.createElement(React.Fragment, null,
+              /*#__PURE__*/React.createElement("span",{className:"tab-pill-icon"}, "\u2022\u2022\u2022"),
+              /*#__PURE__*/React.createElement("span",{className:"tab-pill-label"}, "More")
+            ),
+        /*#__PURE__*/React.createElement("span",{className:"tab-more-chevron"}, moreMenuOpen ? "\u25b4" : "\u25be")
+      )
+    )
+  ),
+  moreMenuOpen && /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement("div",{className:"tab-more-backdrop", onClick:function(){setMoreMenuOpen(false);}}),
+    /*#__PURE__*/React.createElement("div",{className:"tab-more-panel", role:"menu", "aria-label":"More tabs"},
+      /*#__PURE__*/React.createElement("div",{className:"tab-more-panel-handle"}),
+      /*#__PURE__*/React.createElement("div",{className:"tab-more-panel-title"}, "More"),
+      /*#__PURE__*/React.createElement("div",{className:"tab-more-grid"},
+        overflowTabs.map(function(item){
+          return /*#__PURE__*/React.createElement("button",{
+            key:item[0],
+            className:"tab-more-item"+(tab===item[0]?" active":""),
+            role:"menuitem",
+            onClick:function(){ setTab(item[0]); setMoreMenuOpen(false); }
+          },
+            /*#__PURE__*/React.createElement("span",{className:"tab-more-item-icon"}, item[1]),
+            /*#__PURE__*/React.createElement("span",{className:"tab-more-item-label"}, item[2])
+          );
+        })
+      )
+    )
   ),
 
   /*#__PURE__*/React.createElement("div",{className:"main-content"},
@@ -4636,446 +4541,190 @@ function App() {
       color: "#aaa",
       marginTop: 6
     }
-  }, "Submit at least one session to see the dashboard.")), dashData && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))",
-      gap: 10,
-      marginBottom: 20
-    }
-  }, [{
-    label: "Avg Attendance",
-    value: dashData.avg,
-    sub: `${dashData.avgPct}% of ${allMembers.length}`,
-    color: "#1e40af",
-    bg: "#eff6ff"
-  }, {
-    label: "Last Session",
-    value: dashData.latest.totalPresent,
-    sub: `${dashData.latest.pct}%  ${dashData.trend_dir > 0 ? "▲ up" : ""}${dashData.trend_dir < 0 ? "▼ down" : ""}${dashData.trend_dir === 0 ? "-> same" : ""}`,
-    color: dashData.trend_dir >= 0 ? "#15803d" : "#b91c1c",
-    bg: dashData.trend_dir >= 0 ? "#f0fdf4" : "#fef2f2"
-  }, {
-    label: "Best Session",
-    value: dashData.best.totalPresent,
-    sub: dashData.best.date,
-    color: "#15803d",
-    bg: "#f0fdf4"
-  }, {
-    label: "Lowest Session",
-    value: dashData.worst.totalPresent,
-    sub: dashData.worst.date,
-    color: "#b91c1c",
-    bg: "#fef2f2"
-  }, {
-    label: "Regular Yuvaks",
-    value: dashData.liveR,
-    sub: `of ${allMembers.length} total`,
-    color: "#15803d",
-    bg: "#f0fdf4"
-  }, {
-    label: "Irregular",
-    value: dashData.liveI,
-    sub: "need attention",
-    color: "#92400e",
-    bg: "#fffbeb"
-  }, {
-    label: "No Category",
-    value: dashData.liveN,
-    sub: "not attending",
-    color: "#b91c1c",
-    bg: "#fef2f2"
-  }, {
-    label: ">50% Streak",
-    value: dashData.streak,
-    sub: "consecutive sessions",
-    color: "#7c3aed",
-    bg: "#f5f3ff"
-  }].map(k => /*#__PURE__*/React.createElement("div", {
-    key: k.label,
-    style: {
-      background: darkMode ? "rgba(99,102,241,.1)" : k.bg,
-      backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-      borderRadius: 16,
-      padding: "16px 16px",
-      border: darkMode ? "1px solid var(--glass-border)" : `1px solid ${k.color}1a`,
-      boxShadow: "0 2px 12px rgba(79,70,229,.05)"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: "var(--text-muted)",
-      textTransform: "uppercase",
-      letterSpacing: ".06em",
-      marginBottom: 4,
-      fontWeight: 600
-    }
-  }, k.label), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 27,
-      fontWeight: 700,
-      color: k.color,
-      lineHeight: 1
-    }
-  }, k.value), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "var(--text-muted)",
-      marginTop: 4
-    }
-  }, k.sub)))), /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 20,
-      marginBottom: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 14,
-      marginBottom: 16
-    }
-  }, "\uD83D\uDCCA Attendance Trend \u2014 Last ", dashData.trend.length, " Sessions"), (() => {
-    const data = dashData.trend;
-    const W = 600,
-      H = 200,
-      PL = 40,
-      PR = 16,
-      PT = 16,
-      PB = 48;
-    const iW = W - PL - PR,
-      iH = H - PT - PB;
-    const maxVal = Math.max(...data.map(d => d.totalMembers), 1);
-    const xStep = data.length > 1 ? iW / (data.length - 1) : iW;
-    const yScale = v => iH - v / maxVal * iH;
-    const pts = key => data.map((d, i) => `${PL + (data.length > 1 ? i * xStep : iW / 2)},${PT + yScale(d[key])}`).join(" ");
-    const area = key => {
-      const first = `${PL + (data.length > 1 ? 0 : iW / 2)},${PT + iH}`;
-      const last = `${PL + (data.length > 1 ? (data.length - 1) * xStep : iW / 2)},${PT + iH}`;
-      return `${first} ${pts(key)} ${last}`;
-    };
-    const yLines = [0, 25, 50, 75, 100].map(p => Math.round(maxVal * p / 100));
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        overflowX: "auto"
-      }
-    }, /*#__PURE__*/React.createElement("svg", {
-      viewBox: `0 0 ${W} ${H}`,
-      style: {
-        width: "100%",
-        maxWidth: W,
-        display: "block"
-      }
-    }, yLines.map(v => /*#__PURE__*/React.createElement("g", {
-      key: v
-    }, /*#__PURE__*/React.createElement("line", {
-      x1: PL,
-      y1: PT + yScale(v),
-      x2: W - PR,
-      y2: PT + yScale(v),
-      stroke: "#f0f0f0",
-      strokeWidth: "1"
-    }), /*#__PURE__*/React.createElement("text", {
-      x: PL - 4,
-      y: PT + yScale(v) + 4,
-      textAnchor: "end",
-      fontSize: "9",
-      fill: "#bbb"
-    }, v))), /*#__PURE__*/React.createElement("polygon", {
-      points: area("totalPresent"),
-      fill: "#dbeafe",
-      opacity: "0.6"
-    }), /*#__PURE__*/React.createElement("polygon", {
-      points: area("regPresent"),
-      fill: "#dcfce7",
-      opacity: "0.7"
-    }), /*#__PURE__*/React.createElement("polygon", {
-      points: area("regAbsent"),
-      fill: "#fee2e2",
-      opacity: "0.6"
-    }), /*#__PURE__*/React.createElement("polyline", {
-      points: pts("totalPresent"),
-      fill: "none",
-      stroke: "#1e40af",
-      strokeWidth: "2.5",
-      strokeLinejoin: "round"
-    }), /*#__PURE__*/React.createElement("polyline", {
-      points: pts("regPresent"),
-      fill: "none",
-      stroke: "#15803d",
-      strokeWidth: "2",
-      strokeLinejoin: "round",
-      strokeDasharray: "0"
-    }), /*#__PURE__*/React.createElement("polyline", {
-      points: pts("regAbsent"),
-      fill: "none",
-      stroke: "#dc2626",
-      strokeWidth: "2",
-      strokeLinejoin: "round",
-      strokeDasharray: "4 3"
-    }), /*#__PURE__*/React.createElement("polyline", {
-      points: pts("irrPresent"),
-      fill: "none",
-      stroke: "#d97706",
-      strokeWidth: "1.5",
-      strokeLinejoin: "round",
-      strokeDasharray: "2 3"
-    }), data.map((d, i) => {
-      const x = PL + (data.length > 1 ? i * xStep : iW / 2);
-      const yP = PT + yScale(d.totalPresent);
-      const yR = PT + yScale(d.regPresent);
-      const yA = PT + yScale(d.regAbsent);
-      const label = d.date.split(" ").slice(0, 2).join(" ");
-      return /*#__PURE__*/React.createElement("g", {
-        key: i
-      }, /*#__PURE__*/React.createElement("circle", {
-        cx: x,
-        cy: yP,
-        r: "4",
-        fill: "#1e40af",
-        stroke: "#fff",
-        strokeWidth: "1.5"
-      }), /*#__PURE__*/React.createElement("circle", {
-        cx: x,
-        cy: yR,
-        r: "3.5",
-        fill: "#15803d",
-        stroke: "#fff",
-        strokeWidth: "1.5"
-      }), /*#__PURE__*/React.createElement("circle", {
-        cx: x,
-        cy: yA,
-        r: "3.5",
-        fill: "#dc2626",
-        stroke: "#fff",
-        strokeWidth: "1.5"
-      }), /*#__PURE__*/React.createElement("text", {
-        x: x,
-        y: H - 4,
-        textAnchor: "middle",
-        fontSize: "9",
-        fill: "#999",
-        transform: `rotate(-35,${x},${H - 4})`
-      }, label), /*#__PURE__*/React.createElement("text", {
-        x: x,
-        y: yP - 8,
-        textAnchor: "middle",
-        fontSize: "9",
-        fill: "#1e40af",
-        fontWeight: "600"
-      }, d.totalPresent));
-    }), [["#1e40af", "Total Present"], ["#15803d", "Regular Present"], ["#dc2626", "Regular Absent"], ["#d97706", "Irregular Present"]].map(([c, l], i) => /*#__PURE__*/React.createElement("g", {
-      key: l,
-      transform: `translate(${PL + i * 135},${H - 10})`
-    }, /*#__PURE__*/React.createElement("line", {
-      x1: "0",
-      y1: "-3",
-      x2: "14",
-      y2: "-3",
-      stroke: c,
-      strokeWidth: "2"
-    }), /*#__PURE__*/React.createElement("text", {
-      x: "17",
-      y: "0",
-      fontSize: "9",
-      fill: "#666"
-    }, l)))));
-  })()), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 14,
-      marginBottom: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 14,
-      marginBottom: 14
-    }
-  }, "\uD83C\uDF69 Category Distribution"), (() => {
-    const total = dashData.liveR + dashData.liveI + dashData.liveN || 1;
-    const segs = [{
-      label: "Regular",
-      value: dashData.liveR,
-      color: "#15803d"
-    }, {
-      label: "Irregular",
-      value: dashData.liveI,
-      color: "#d97706"
-    }, {
-      label: "No",
-      value: dashData.liveN,
-      color: "#dc2626"
-    }];
-    const cx = 80,
-      cy = 80,
-      r = 60,
-      inner = 36;
-    let angle = -Math.PI / 2;
-    const arcs = segs.map(s => {
-      const sweep = s.value / total * Math.PI * 2;
-      const x1 = cx + r * Math.cos(angle),
-        y1 = cy + r * Math.sin(angle);
-      angle += sweep;
-      const x2 = cx + r * Math.cos(angle),
-        y2 = cy + r * Math.sin(angle);
-      const xi1 = cx + inner * Math.cos(angle - sweep),
-        yi1 = cy + inner * Math.sin(angle - sweep);
-      const xi2 = cx + inner * Math.cos(angle),
-        yi2 = cy + inner * Math.sin(angle);
-      const large = sweep > Math.PI ? 1 : 0;
-      return {
-        ...s,
-        d: `M${x1},${y1} A${r},${r},0,${large},1,${x2},${y2} L${xi2},${yi2} A${inner},${inner},0,${large},0,${xi1},${yi1} Z`,
-        pct: Math.round(s.value / total * 100)
-      };
-    });
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 16,
-        flexWrap: "wrap"
-      }
-    }, /*#__PURE__*/React.createElement("svg", {
-      width: "160",
-      height: "160",
-      viewBox: "0 0 160 160"
-    }, arcs.map(a => /*#__PURE__*/React.createElement("path", {
-      key: a.label,
-      d: a.d,
-      fill: a.color,
-      opacity: "0.9"
-    })), /*#__PURE__*/React.createElement("text", {
-      x: cx,
-      y: cy - 6,
-      textAnchor: "middle",
-      fontSize: "18",
-      fontWeight: "700",
-      fill: "#1a1a1a"
-    }, allMembers.length), /*#__PURE__*/React.createElement("text", {
-      x: cx,
-      y: cy + 12,
-      textAnchor: "middle",
-      fontSize: "9",
-      fill: "#888"
-    }, "Total")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, arcs.map(a => /*#__PURE__*/React.createElement("div", {
-      key: a.label,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 10
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 12,
-        height: 12,
-        borderRadius: 3,
-        background: a.color,
-        flexShrink: 0
-      }
-    }), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        fontSize: 13
-      }
-    }, a.label), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 700,
-        color: a.color,
-        fontSize: 14
-      }
-    }, a.value), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#aaa",
-        width: 32,
-        textAlign: "right"
-      }
-    }, a.pct, "%")))));
-  })()), /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 14,
-      marginBottom: 14
-    }
-  }, "\uD83D\uDCF6 Attendance % per Session"), (() => {
-    const data = dashData.trend;
-    const barW = Math.min(32, Math.floor(220 / data.length) - 4);
-    return /*#__PURE__*/React.createElement("svg", {
-      viewBox: `0 0 260 160`,
-      style: {
-        width: "100%",
-        display: "block"
-      }
-    }, [50, 75, 100].map(p => /*#__PURE__*/React.createElement("g", {
-      key: p
-    }, /*#__PURE__*/React.createElement("line", {
-      x1: "30",
-      y1: 140 - p * 1.1,
-      x2: "260",
-      y2: 140 - p * 1.1,
-      stroke: "#f0f0f0",
-      strokeWidth: "1"
-    }), /*#__PURE__*/React.createElement("text", {
-      x: "26",
-      y: 143 - p * 1.1,
-      textAnchor: "end",
-      fontSize: "8",
-      fill: "#ccc"
-    }, p, "%"))), data.map((d, i) => {
-      const bh = d.pct * 1.1;
-      const x = 34 + i * (barW + 4);
-      const fill = d.pct >= 75 ? "#15803d" : d.pct >= 50 ? "#d97706" : "#dc2626";
-      const label = d.date.split(" ")[0] + "\n" + d.date.split(" ")[1];
-      return /*#__PURE__*/React.createElement("g", {
-        key: i
-      }, /*#__PURE__*/React.createElement("rect", {
-        x: x,
-        y: 140 - bh,
-        width: barW,
-        height: bh,
-        rx: "3",
-        fill: fill,
-        opacity: "0.85"
-      }), /*#__PURE__*/React.createElement("text", {
-        x: x + barW / 2,
-        y: 135 - bh,
-        textAnchor: "middle",
-        fontSize: "8",
-        fill: fill,
-        fontWeight: "600"
-      }, d.pct, "%"), /*#__PURE__*/React.createElement("text", {
-        x: x + barW / 2,
-        y: 150,
-        textAnchor: "middle",
-        fontSize: "7.5",
-        fill: "#aaa"
-      }, d.date.split(" ")[0]), /*#__PURE__*/React.createElement("text", {
-        x: x + barW / 2,
-        y: 158,
-        textAnchor: "middle",
-        fontSize: "7.5",
-        fill: "#aaa"
-      }, d.date.split(" ")[1]));
-    }));
-  })())), /*#__PURE__*/React.createElement("div", {
+  }, "Submit at least one session to see the dashboard.")), dashData && /*#__PURE__*/React.createElement(React.Fragment, null,
+
+  /* ── Hero KPI row: Turnout Rate + Present, each with a mini trend ──── */
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 14 }
+  },
+    (() => {
+      const trend = dashData.trend;
+      const turnoutPct = dashData.latest.pct;
+      const turnoutColor = turnoutPct >= 60 ? "#15803d" : turnoutPct >= 40 ? "#d97706" : "#b91c1c";
+      const sparkPts = (key, max) => trend.map((d, i) => {
+        const x = trend.length > 1 ? (i / (trend.length - 1)) * 100 : 50;
+        const y = 30 - (d[key] / Math.max(max, 1)) * 26;
+        return `${x},${y}`;
+      }).join(" ");
+      const hero = [
+        {
+          key: "turnout",
+          label: "Turnout Rate",
+          big: turnoutPct + "%",
+          sub: dashData.latest.totalPresent + " of " + allMembers.length + " present",
+          color: turnoutColor,
+          spark: sparkPts("pct", 100),
+          clickable: true,
+          onClick: () => {
+            const src = prevHistory.find(h => h.date === dashData.latest.date);
+            const present = src ? src.records.filter(r => r.status === "P").map(r => ({ name: r.name, sub: getCategory(r.name, prevHistory) === "R" ? "Regular" : getCategory(r.name, prevHistory) === "I" ? "Irregular" : "No Category" })) : [];
+            setDashModal({ title: "Present \u2014 " + dashData.latest.date, members: present });
+          }
+        },
+        {
+          key: "present",
+          label: "Present",
+          big: dashData.latest.totalPresent,
+          sub: "Latest \u2014 " + dashData.latest.date,
+          color: "#1e40af",
+          spark: sparkPts("totalPresent", Math.max(...trend.map(d => d.totalMembers), 1)),
+          clickable: false
+        }
+      ];
+      return hero.map(k => /*#__PURE__*/React.createElement("div", {
+        key: k.key,
+        onClick: k.clickable ? k.onClick : undefined,
+        className: "card",
+        style: {
+          padding: "16px 18px", cursor: k.clickable ? "pointer" : "default",
+          position: "relative", overflow: "hidden", transition: "transform .15s, box-shadow .15s"
+        },
+        onMouseEnter: k.clickable ? e => { e.currentTarget.style.transform = "translateY(-2px)"; } : undefined,
+        onMouseLeave: k.clickable ? e => { e.currentTarget.style.transform = ""; } : undefined
+      },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600, marginBottom: 6 } }, k.label),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 30, fontWeight: 800, color: k.color, lineHeight: 1 } }, k.big),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-muted)", marginTop: 4, marginBottom: 8 } }, k.sub),
+        /*#__PURE__*/React.createElement("svg", {
+          viewBox: "0 0 100 30", preserveAspectRatio: "none",
+          style: { width: "100%", height: 30, display: "block" }
+        },
+          /*#__PURE__*/React.createElement("polyline", {
+            points: k.spark, fill: "none", stroke: k.color, strokeWidth: "2.2",
+            strokeLinecap: "round", strokeLinejoin: "round", vectorEffect: "non-scaling-stroke"
+          })
+        )
+      ));
+    })()
+  ),
+
+  /* ── Compact secondary stat strip: Absent / Registered / Streak ────── */
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }
+  },
+    [
+      { label: "Absent", value: allMembers.length - dashData.latest.totalPresent, sub: "in latest session", color: "#b91c1c" },
+      { label: "Registered", value: allMembers.length, sub: dashData.liveR + " R \u00b7 " + dashData.liveI + " I \u00b7 " + dashData.liveN + " N", color: "#7c3aed" },
+      { label: ">50% Streak", value: dashData.streak, sub: "consecutive sessions", color: "#0d9488" }
+    ].map(s => /*#__PURE__*/React.createElement("div", {
+      key: s.label,
+      style: { flex: "1 1 140px", background: "var(--glass-bg)", border: "1px solid var(--glass-border)", borderRadius: "var(--radius-md)", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { width: 6, height: 32, borderRadius: 3, background: s.color, flexShrink: 0 } }),
+      /*#__PURE__*/React.createElement("div", { style: { minWidth: 0 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 17, fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.1 } }, s.value),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "var(--text-muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, s.label + " \u00b7 " + s.sub)
+      )
+    ))
+  ),
+
+  /* ── Attendance Trend bar chart with vs-previous delta callout ─────── */
+  /*#__PURE__*/React.createElement("div", { className: "card", style: { padding: 20, marginBottom: 16 } },
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 8 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "var(--text-primary)" } }, "\uD83D\uDCC8 Attendance Trend \u2014 Last " + dashData.trend.length + " Sessions"),
+      (() => {
+        const cur = dashData.latest.pct, prevPct = dashData.prev ? dashData.prev.pct : null;
+        if (prevPct === null) return null;
+        const delta = cur - prevPct;
+        const up = delta >= 0;
+        return /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 12, fontWeight: 700, color: up ? "#15803d" : "#b91c1c", background: up ? "var(--success-light)" : "var(--danger-light)", padding: "4px 10px", borderRadius: 20 }
+        }, (up ? "\u25b2 " : "\u25bc ") + Math.abs(delta) + "% vs prev session");
+      })()
+    ),
+    (() => {
+      const data = dashData.trend;
+      const barW = Math.min(34, Math.floor(560 / data.length) - 6);
+      const gap = 6;
+      const innerW = data.length * (barW + gap) - gap;
+      const W = innerW + 40, H = 170;
+      return /*#__PURE__*/React.createElement("div", { style: { overflowX: "auto" } },
+        /*#__PURE__*/React.createElement("svg", {
+          viewBox: `0 0 ${W} ${H}`, style: { width: "100%", minWidth: 280, maxWidth: W, display: "block" }
+        },
+          [25, 50, 75, 100].map(p => /*#__PURE__*/React.createElement("g", { key: p },
+            /*#__PURE__*/React.createElement("line", { x1: 28, y1: 130 - p * 1.05, x2: W - 4, y2: 130 - p * 1.05, stroke: "var(--border)", strokeWidth: "1" }),
+            /*#__PURE__*/React.createElement("text", { x: 24, y: 133 - p * 1.05, textAnchor: "end", fontSize: "8", fill: "var(--text-muted)" }, p)
+          )),
+          data.map((d, i) => {
+            const bh = d.pct * 1.05;
+            const x = 30 + i * (barW + gap);
+            const fill = d.pct >= 60 ? "var(--success)" : d.pct >= 40 ? "var(--warning)" : "var(--danger)";
+            const isLast = i === data.length - 1;
+            return /*#__PURE__*/React.createElement("g", { key: i, style: { cursor: "pointer" }, onClick: () => {
+              const src = prevHistory.find(h => h.date === d.date);
+              const present = src ? src.records.filter(r => r.status === "P").map(r => ({ name: r.name, sub: getCategory(r.name, prevHistory) === "R" ? "Regular" : getCategory(r.name, prevHistory) === "I" ? "Irregular" : "No Category" })) : [];
+              setDashModal({ title: "Present \u2014 " + d.date, members: present });
+            } },
+              /*#__PURE__*/React.createElement("rect", { x: x, y: 130 - bh, width: barW, height: bh, rx: 5, fill: fill, opacity: isLast ? 1 : 0.78 }),
+              /*#__PURE__*/React.createElement("text", { x: x + barW / 2, y: 130 - bh - 5, textAnchor: "middle", fontSize: "9", fontWeight: "700", fill: fill }, d.pct + "%"),
+              /*#__PURE__*/React.createElement("text", { x: x + barW / 2, y: 144, textAnchor: "middle", fontSize: "8", fill: "var(--text-muted)" }, d.date.split(" ")[0]),
+              /*#__PURE__*/React.createElement("text", { x: x + barW / 2, y: 154, textAnchor: "middle", fontSize: "8", fill: "var(--text-muted)" }, d.date.split(" ")[1])
+            );
+          })
+        )
+      );
+    })()
+  ),
+
+  /* ── Category Split donut ───────────────────────────────────────────── */
+  /*#__PURE__*/React.createElement("div", { className: "card", style: { padding: 20, marginBottom: 16 } },
+    /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 14, color: "var(--text-primary)", marginBottom: 16 } }, "\uD83C\uDFAF Category Split"),
+    (() => {
+      const total = allMembers.length || 1;
+      const segs = [
+        { label: "Regular", value: dashData.liveR, color: "var(--success)", cat: "R" },
+        { label: "Irregular", value: dashData.liveI, color: "var(--warning)", cat: "I" },
+        { label: "No Category", value: dashData.liveN, color: "var(--danger)", cat: "N" }
+      ];
+      const r = 52, cx = 60, cy = 60, sw = 16;
+      const circumference = 2 * Math.PI * r;
+      let offsetAcc = 0;
+      const arcs = segs.map(s => {
+        const pct = s.value / total;
+        const dash = pct * circumference;
+        const arc = { ...s, pct: Math.round(pct * 100), dashArray: `${dash} ${circumference - dash}`, dashOffset: -offsetAcc };
+        offsetAcc += dash;
+        return arc;
+      });
+      return /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" } },
+        /*#__PURE__*/React.createElement("svg", { viewBox: "0 0 120 120", style: { width: 120, height: 120, flexShrink: 0, transform: "rotate(-90deg)" } },
+          /*#__PURE__*/React.createElement("circle", { cx, cy, r, fill: "none", stroke: "var(--bg-muted)", strokeWidth: sw }),
+          arcs.map(a => /*#__PURE__*/React.createElement("circle", {
+            key: a.label, cx, cy, r, fill: "none", stroke: a.color, strokeWidth: sw,
+            strokeDasharray: a.dashArray, strokeDashoffset: a.dashOffset, strokeLinecap: "round",
+            style: { transition: "stroke-dasharray .3s" }
+          }))
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 160 } },
+          arcs.map(a => /*#__PURE__*/React.createElement("div", {
+            key: a.label,
+            onClick: () => {
+              const members = allMembers.filter(m => getCategory(m.name, prevHistory) === a.cat).map(m => ({ name: m.name, sub: fpOverrides[m.name] || m.followup }));
+              setDashModal({ title: a.label + " Yuvaks (" + a.value + ")", members });
+            },
+            style: { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", cursor: "pointer", borderBottom: "1px solid var(--border)" }
+          },
+            /*#__PURE__*/React.createElement("div", { style: { width: 10, height: 10, borderRadius: 3, background: a.color, flexShrink: 0 } }),
+            /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, color: "var(--text-primary)" } }, a.label),
+            /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, color: a.color, fontSize: 14 } }, a.value),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--text-muted)", width: 34, textAlign: "right" } }, a.pct + "%")
+          ))
+        )
+      );
+    })()
+  ),
+/*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 20,
@@ -5366,7 +5015,75 @@ function App() {
       fontSize: 12,
       color: "#555"
     }
-  }, /*#__PURE__*/React.createElement("b", null, dashData.fpPerf.filter(f => f.avg < 50).map(f => f.fp).join(", ")), " below 50% avg attendance."))))), tab === "panel" && !dateConfirmed && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("b", null, dashData.fpPerf.filter(f => f.avg < 50).map(f => f.fp).join(", ")), " below 50% avg attendance."))))), dashModal && /*#__PURE__*/React.createElement("div", {
+    onClick: () => setDashModal(null),
+    style: {
+      position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 9000,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      background: darkMode ? "#1e293b" : "#fff",
+      borderRadius: 20,
+      width: "100%",
+      maxWidth: 480,
+      maxHeight: "82vh",
+      display: "flex",
+      flexDirection: "column",
+      boxShadow: "0 24px 64px rgba(0,0,0,.25)",
+      overflow: "hidden"
+    }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "18px 20px 14px",
+        borderBottom: "1px solid " + (darkMode ? "rgba(255,255,255,.08)" : "#f0f0f0")
+      }
+    },
+      /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: 15, color: darkMode ? "#f1f5f9" : "#1e293b"}}, dashModal.title),
+        /*#__PURE__*/React.createElement("div", {style: {fontSize: 11, color: "#94a3b8", marginTop: 2}}, dashModal.members.length + " member" + (dashModal.members.length !== 1 ? "s" : ""))
+      ),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setDashModal(null),
+        style: {
+          background: darkMode ? "rgba(255,255,255,.08)" : "#f1f5f9",
+          border: "none", borderRadius: 8, width: 32, height: 32,
+          cursor: "pointer", fontSize: 16, color: "#64748b",
+          display: "flex", alignItems: "center", justifyContent: "center"
+        }
+      }, "✕")
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {overflowY: "auto", flex: 1}},
+      dashModal.members.length === 0
+        ? /*#__PURE__*/React.createElement("div", {style: {padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 13}}, "No members to show.")
+        : dashModal.members.map(function(m, i) { return /*#__PURE__*/React.createElement("div", {
+            key: m.name,
+            style: {
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "10px 20px",
+              borderBottom: "1px solid " + (darkMode ? "rgba(255,255,255,.05)" : "#f8f8f8"),
+              background: i % 2 === 0 ? "transparent" : (darkMode ? "rgba(255,255,255,.02)" : "#fafafa")
+            }
+          },
+          /*#__PURE__*/React.createElement("div", {
+            style: {
+              width: 30, height: 30, borderRadius: "50%",
+              background: "linear-gradient(135deg,#6366f1,#8b5cf6)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0
+            }
+          }, m.name.charAt(0).toUpperCase()),
+          /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 0}},
+            /*#__PURE__*/React.createElement("div", {style: {fontWeight: 600, fontSize: 13, color: darkMode ? "#f1f5f9" : "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}, m.name),
+            m.sub && /*#__PURE__*/React.createElement("div", {style: {fontSize: 11, color: "#94a3b8", marginTop: 1}}, m.sub)
+          ),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: 11, fontWeight: 600, color: "#64748b", flexShrink: 0}}, "#" + (i + 1))
+        );})
+    )
+  )), tab === "panel" && !dateConfirmed && /*#__PURE__*/React.createElement("div", {
     style: { maxWidth: 420, margin: "30px auto 0" }
   },
     /*#__PURE__*/React.createElement("div", { style: { textAlign: "center", marginBottom: 18 } },
@@ -5687,12 +5404,7 @@ function App() {
           className: "wa-menu-item",
           onClick: () => { setShowWAMenu(false); setShowGroupedWAModal(true); }
         }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 13 } }, "\uD83D\uDCDD Grouped Absentees"),
-           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--text-muted)" } }, "By followup person, with absence reasons")),
-        /*#__PURE__*/React.createElement("button", {
-          className: "wa-menu-item",
-          onClick: () => { setShowWAMenu(false); doShareRegularAbsentByFP(); }
-        }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 13 } }, "\uD83D\uDD34 Regular Absent (live)"),
-           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--text-muted)" } }, `${regularAbsent.length} Regular yuvak${regularAbsent.length !== 1 ? "s" : ""} absent right now, by followup, with contacts`))
+           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--text-muted)" } }, "By followup person, with absence reasons"))
       )
     )
   ), /*#__PURE__*/React.createElement("button", {
@@ -5876,9 +5588,8 @@ function App() {
         style: {
           flex: 1,
           minWidth: 0,
-          cursor: "pointer"
-        },
-        onClick: () => setProfileMember(m.name)
+          cursor: "default"
+        }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 13,
@@ -5990,9 +5701,8 @@ function App() {
         style: {
           flex: 1,
           minWidth: 0,
-          cursor: "pointer"
-        },
-        onClick: () => setProfileMember(m.name)
+          cursor: "default"
+        }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 13,
@@ -6108,7 +5818,8 @@ function App() {
   }, "\u2713 Mark All Present")), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
-      overflow: "hidden"
+      overflowX: "auto",
+      overflowY: "visible"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -6160,9 +5871,8 @@ function App() {
     style: {
       flex: 1,
       minWidth: 0,
-      cursor: "pointer"
-    },
-    onClick: () => setProfileMember(m.name)
+      cursor: "default"
+    }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13,
@@ -6225,7 +5935,7 @@ function App() {
           ),
           irregularAbsent.map(function(m,i){ return /*#__PURE__*/React.createElement("div", {key:m.name,className:"row-hover",style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderBottom:"1px solid #fef9e7",background:"#fffdf5"}},
             /*#__PURE__*/React.createElement("div", {style:{width:28,textAlign:"center",fontSize:12,color:"#aaa",flexShrink:0}}, i+1),
-            /*#__PURE__*/React.createElement("div", {style:{flex:1,minWidth:0,cursor:"pointer"},onClick:function(){setProfileMember(m.name);}},
+            /*#__PURE__*/React.createElement("div", {style:{flex:1,minWidth:0}},
               /*#__PURE__*/React.createElement("div", {style:{fontSize:13,fontWeight:600,color:"#1a1a1a"}}, m.name),
               /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:"#999",marginTop:1}}, m.followup)
             ),
@@ -6240,7 +5950,34 @@ function App() {
         )
       )
 ), tab === "report" && /*#__PURE__*/React.createElement(React.Fragment, null,
-  /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"flex-end",marginBottom:10}},
+  /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:10}},
+    /*#__PURE__*/React.createElement("button", {className:"btn btn-wa", onClick: () => {
+      const date = sessionDate || "Today";
+      const freq = sabhaType || "Weekly";
+      const groups = [...new Set(allMembers.map(m => fpOverrides[m.name] || m.followup))].sort();
+      let lines = [];
+      lines.push("\uD83D\uDD14 *Regular Absent \u2014 " + date + " (" + freq + ")*");
+      lines.push("");
+      let grandTotal = 0;
+      groups.forEach(fp => {
+        const absentRegular = allMembers.filter(m => {
+          const s = (attendance[m.name] && attendance[m.name].status) || null;
+          return (fpOverrides[m.name] || m.followup) === fp && getCategory(m.name, history) === "R" && s !== "P";
+        });
+        if (absentRegular.length === 0) return;
+        grandTotal += absentRegular.length;
+        lines.push("*" + fp + "* (" + absentRegular.length + ")");
+        absentRegular.forEach(function(m, i) { lines.push("  " + (i + 1) + ". " + m.name); });
+        lines.push("");
+      });
+      if (grandTotal === 0) {
+        lines = ["\u2705 No Regular Yuvaks absent on " + date + "!"];
+      } else {
+        lines.push("*Total Regular Absent: " + grandTotal + "*");
+      }
+      const msg = lines.join("\n");
+      window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank");
+    }, style:{gap:6}}, "\uD83D\uDCCB Regular Absent (WhatsApp)"),
     /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:shareReportAsImage,style:{gap:6}}, "\uD83D\uDCF8 Share as Image (WhatsApp)")
   ),
   /*#__PURE__*/React.createElement("div", {
@@ -6265,10 +6002,23 @@ function App() {
       gap: 10,
       marginBottom: 18
     }
-  }, [["Regular Present", reportData.totRP, "#15803d"], ["Irregular Present", reportData.totIP, "#92400e"], ["No (Present)", reportData.totNP, "#b91c1c"], ["Grand Present", reportData.grandP, "#1e40af"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
+  }, [["Regular Present", reportData.totRP, "#15803d", "R", "P"], ["Irregular Present", reportData.totIP, "#92400e", "I", "P"], ["No (Present)", reportData.totNP, "#b91c1c", "N", "P"], ["Grand Present", reportData.grandP, "#1e40af", null, "P"]].map(([l, v, c, cat, status]) => /*#__PURE__*/React.createElement("div", {
     key: l,
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-card",
+    onClick: () => {
+      const members = allMembers.filter(m => {
+        const s = (attendance[m.name] && attendance[m.name].status) || null;
+        const mc = getCategory(m.name, history);
+        const isPresent = s === "P";
+        const matchStatus = status === "P" ? isPresent : !isPresent;
+        return matchStatus && (cat === null || mc === cat);
+      }).map(m => ({ name: m.name, sub: (fpOverrides[m.name] || m.followup) + " · " + (getCategory(m.name, history) === "R" ? "Regular" : getCategory(m.name, history) === "I" ? "Irregular" : "No") }));
+      setReportModal({ title: l + " (" + v + ")", members });
+    },
+    style: { cursor: "pointer", transition: "transform .15s, box-shadow .15s", position: "relative" },
+    onMouseEnter: e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 20px " + c + "33"; },
+    onMouseLeave: e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }
+  }, /*#__PURE__*/React.createElement("div", { style: { position: "absolute", top: 6, right: 8, fontSize: 9, color: c, opacity: .55, fontWeight: 700 } }, "TAP"), /*#__PURE__*/React.createElement("div", {
     className: "stat-label"
   }, l), /*#__PURE__*/React.createElement("div", {
     className: "stat-num",
@@ -6289,10 +6039,23 @@ function App() {
       gap: 10,
       marginBottom: 22
     }
-  }, [["Regular Absent", reportData.totRA, "#15803d"], ["Irregular Absent", reportData.totIA, "#92400e"], ["No (Absent)", reportData.totNA, "#b91c1c"], ["Grand Absent", reportData.grandA, "#64748b"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
+  }, [["Regular Absent", reportData.totRA, "#15803d", "R", "A"], ["Irregular Absent", reportData.totIA, "#92400e", "I", "A"], ["No (Absent)", reportData.totNA, "#b91c1c", "N", "A"], ["Grand Absent", reportData.grandA, "#64748b", null, "A"]].map(([l, v, c, cat, status]) => /*#__PURE__*/React.createElement("div", {
     key: l,
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-card",
+    onClick: () => {
+      const members = allMembers.filter(m => {
+        const s = (attendance[m.name] && attendance[m.name].status) || null;
+        const mc = getCategory(m.name, history);
+        const isPresent = s === "P";
+        const matchStatus = status === "P" ? isPresent : !isPresent;
+        return matchStatus && (cat === null || mc === cat);
+      }).map(m => ({ name: m.name, sub: (fpOverrides[m.name] || m.followup) + " · " + (getCategory(m.name, history) === "R" ? "Regular" : getCategory(m.name, history) === "I" ? "Irregular" : "No") }));
+      setReportModal({ title: l + " (" + v + ")", members });
+    },
+    style: { cursor: "pointer", transition: "transform .15s, box-shadow .15s", position: "relative" },
+    onMouseEnter: e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 20px " + c + "33"; },
+    onMouseLeave: e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }
+  }, /*#__PURE__*/React.createElement("div", { style: { position: "absolute", top: 6, right: 8, fontSize: 9, color: c, opacity: .55, fontWeight: 700 } }, "TAP"), /*#__PURE__*/React.createElement("div", {
     className: "stat-label"
   }, l), /*#__PURE__*/React.createElement("div", {
     className: "stat-num",
@@ -6318,20 +6081,22 @@ function App() {
     }
   }, /*#__PURE__*/React.createElement("table", {
     style: {
-      minWidth: 700
+      width: "100%",
+      tableLayout: "auto"
     }
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
     rowSpan: 2,
     style: {
       verticalAlign: "middle",
-      minWidth: 150
+      whiteSpace: "nowrap",
+      paddingRight: 16
     }
   }, "Follow-up Group"), /*#__PURE__*/React.createElement("th", {
     rowSpan: 2,
     style: {
-      width: 55,
       verticalAlign: "middle",
-      textAlign: "center"
+      textAlign: "center",
+      whiteSpace: "nowrap"
     }
   }, "Members"), /*#__PURE__*/React.createElement("th", {
     colSpan: 4,
@@ -6351,59 +6116,67 @@ function App() {
     style: {
       background: "#166534",
       borderLeft: "2px solid #16a34a",
-      width: 75,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDFE2 Regular"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#78350f",
-      width: 75,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDFE1 Irregular"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#7f1d1d",
-      width: 55,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDD34 No"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#1e3a5f",
-      width: 60,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "Total"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#166534",
       borderLeft: "2px solid #dc2626",
-      width: 75,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDFE2 Regular"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#78350f",
-      width: 75,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDFE1 Irregular"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#7f1d1d",
-      width: 55,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "\uD83D\uDD34 No"), /*#__PURE__*/React.createElement("th", {
     style: {
       background: "#374151",
-      width: 60,
       textAlign: "center",
-      fontSize: 11
+      fontSize: 11,
+      whiteSpace: "nowrap",
+      padding: "6px 10px"
     }
   }, "Total"))), /*#__PURE__*/React.createElement("tbody", null, reportData.rows.map(r => /*#__PURE__*/React.createElement("tr", {
     key: r.fp
@@ -6414,7 +6187,9 @@ function App() {
   }, r.fp), /*#__PURE__*/React.createElement("td", {
     style: {
       textAlign: "center",
-      color: "#666"
+      color: "#666",
+      padding: "8px 12px",
+      whiteSpace: "nowrap"
     }
   }, r.members), /*#__PURE__*/React.createElement("td", {
     style: {
@@ -6536,7 +6311,69 @@ function App() {
       color: "#aaa"
     }
   }, "Submit attendance first to lock it into history and get accurate category counts.")
-  ), tab === "history" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  ), reportModal && /*#__PURE__*/React.createElement("div", {
+    onClick: () => setReportModal(null),
+    style: {
+      position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 9000,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      background: darkMode ? "#1e293b" : "#fff",
+      borderRadius: 20, width: "100%", maxWidth: 480, maxHeight: "82vh",
+      display: "flex", flexDirection: "column",
+      boxShadow: "0 24px 64px rgba(0,0,0,.25)", overflow: "hidden"
+    }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "18px 20px 14px",
+        borderBottom: "1px solid " + (darkMode ? "rgba(255,255,255,.08)" : "#f0f0f0")
+      }
+    },
+      /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: 15, color: darkMode ? "#f1f5f9" : "#1e293b"}}, reportModal.title),
+        /*#__PURE__*/React.createElement("div", {style: {fontSize: 11, color: "#94a3b8", marginTop: 2}}, reportModal.members.length + " member" + (reportModal.members.length !== 1 ? "s" : ""))
+      ),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setReportModal(null),
+        style: {
+          background: darkMode ? "rgba(255,255,255,.08)" : "#f1f5f9",
+          border: "none", borderRadius: 8, width: 32, height: 32,
+          cursor: "pointer", fontSize: 16, color: "#64748b",
+          display: "flex", alignItems: "center", justifyContent: "center"
+        }
+      }, "\u2715")
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {overflowY: "auto", flex: 1}},
+      reportModal.members.length === 0
+        ? /*#__PURE__*/React.createElement("div", {style: {padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 13}}, "No members to show.")
+        : reportModal.members.map(function(m, i) { return /*#__PURE__*/React.createElement("div", {
+            key: m.name,
+            style: {
+              display: "flex", alignItems: "center", gap: 12, padding: "10px 20px",
+              borderBottom: "1px solid " + (darkMode ? "rgba(255,255,255,.05)" : "#f8f8f8"),
+              background: i % 2 === 0 ? "transparent" : (darkMode ? "rgba(255,255,255,.02)" : "#fafafa")
+            }
+          },
+          /*#__PURE__*/React.createElement("div", {
+            style: {
+              width: 30, height: 30, borderRadius: "50%",
+              background: "linear-gradient(135deg,#6366f1,#8b5cf6)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0
+            }
+          }, m.name.charAt(0).toUpperCase()),
+          /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 0}},
+            /*#__PURE__*/React.createElement("div", {style: {fontWeight: 600, fontSize: 13, color: darkMode ? "#f1f5f9" : "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}, m.name),
+            m.sub && /*#__PURE__*/React.createElement("div", {style: {fontSize: 11, color: "#94a3b8", marginTop: 1}}, m.sub)
+          ),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: 11, fontWeight: 600, color: "#64748b", flexShrink: 0}}, "#" + (i + 1))
+        );})
+    )
+  )), tab === "history" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 10,
@@ -6640,7 +6477,10 @@ function App() {
   }, "No sessions found in this date range."), prevHistory.length > 0 && filteredDates.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
-      overflowX: "auto"
+      overflowX: "auto",
+      overflowY: "auto",
+      maxHeight: "70vh",
+      position: "relative"
     }
   }, /*#__PURE__*/React.createElement("table", {
     style: {
@@ -6902,7 +6742,8 @@ function App() {
     key: label,
     style: {
       background: bg,
-      color: "#fff"
+      color: "#fff",
+      ...(cat === null ? { position: "sticky", bottom: 0, zIndex: 3 } : {})
     }
   }, /*#__PURE__*/React.createElement("td", {
     style: {
@@ -6911,23 +6752,26 @@ function App() {
       whiteSpace: "nowrap",
       position: "sticky",
       left: 0,
+      ...(cat === null ? { bottom: 0 } : {}),
       background: bg,
-      zIndex: 1,
+      zIndex: 4,
       padding: "7px 10px"
     }
   }, label), /*#__PURE__*/React.createElement("td", {
     style: {
       position: "sticky",
       left: 180,
+      ...(cat === null ? { bottom: 0 } : {}),
       background: bg,
-      zIndex: 1
+      zIndex: 4
     }
   }), /*#__PURE__*/React.createElement("td", {
     style: {
       position: "sticky",
       left: 310,
+      ...(cat === null ? { bottom: 0 } : {}),
       background: bg,
-      zIndex: 1
+      zIndex: 4
     }
   }), /*#__PURE__*/React.createElement("td", {
     style: {
@@ -6936,8 +6780,9 @@ function App() {
       color,
       position: "sticky",
       left: 390,
+      ...(cat === null ? { bottom: 0 } : {}),
       background: bg,
-      zIndex: 1
+      zIndex: 4
     }
   }, cat === null ? filteredDates.reduce((s, d) => {
     const sess = prevHistory.find(x => x.date === d);
@@ -6954,7 +6799,8 @@ function App() {
         textAlign: "center",
         fontWeight: 700,
         color,
-        fontSize: 13
+        fontSize: 13,
+        ...(cat === null ? { position: "sticky", bottom: 0, background: bg } : {})
       }
     }, count || "—");
   })))))), /*#__PURE__*/React.createElement("div", {
@@ -7455,13 +7301,22 @@ function App() {
     }
   }, /*#__PURE__*/React.createElement("table", {
     style: {
-      minWidth: 720
+      minWidth: 980
     }
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
     style: {
       width: 32
     }
   }, "#"), /*#__PURE__*/React.createElement("th", null, "Name"), /*#__PURE__*/React.createElement("th", null, "Contact"), /*#__PURE__*/React.createElement("th", null, "Followup"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      width: 90
+    }
+  }, "Category"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      width: 110,
+      textAlign: "center"
+    }
+  }, "Last Attended"), /*#__PURE__*/React.createElement("th", {
     style: {
       width: 55
     }
@@ -7532,6 +7387,32 @@ function App() {
         marginLeft: 4
       }
     }, "\u21BA reassigned")), /*#__PURE__*/React.createElement("td", {
+      style: {
+        textAlign: "center"
+      }
+    }, /*#__PURE__*/React.createElement("select", {
+      className: "form-input",
+      value: catOverrides[m.name] || "auto",
+      onChange: e => doSetCatOverride(m.name, e.target.value),
+      style: {
+        fontSize: 11,
+        padding: "2px 6px",
+        borderRadius: 5,
+        border: "1px solid #d1d5db",
+        background: catOverrides[m.name] ? "#fef9c3" : "#fff",
+        fontWeight: 600,
+        color: effCat === "R" ? "#15803d" : effCat === "I" ? "#d97706" : "#b91c1c",
+        cursor: "pointer",
+        width: 90
+      }
+    }, /*#__PURE__*/React.createElement("option", {value: "auto"}, "Auto (" + (effCat === "R" ? "Regular" : effCat === "I" ? "Irregular" : "No") + ")"), /*#__PURE__*/React.createElement("option", {value: "R"}, "Regular"), /*#__PURE__*/React.createElement("option", {value: "I"}, "Irregular"), /*#__PURE__*/React.createElement("option", {value: "N"}, "No"))), /*#__PURE__*/React.createElement("td", {
+      style: {
+        textAlign: "center",
+        fontSize: 11,
+        color: getLastAttended(m.name) === "Never" ? "#ccc" : "#15803d",
+        fontWeight: 500
+      }
+    }, getLastAttended(m.name)), /*#__PURE__*/React.createElement("td", {
       style: {
         textAlign: "center"
       }
@@ -8365,9 +8246,8 @@ function App() {
         borderRadius: 8,
         padding: "5px 10px",
         fontSize: 12,
-        cursor: "pointer"
-      },
-      onClick: () => setProfileMember(m.name)
+        cursor: "default"
+      }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
         color: "#888",
@@ -8423,7 +8303,7 @@ function App() {
             /*#__PURE__*/React.createElement("button", {
               className:"btn btn-gray",
               style:{fontSize:11,padding:"4px 10px"},
-              onClick: function(){ setProfileMember(m.name); }
+              onClick: function(){} 
             }, "\uD83D\uDCAC Follow Up")
           )
         );
@@ -8503,9 +8383,8 @@ function App() {
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           flex: 1,
-          cursor: "pointer"
-        },
-        onClick: () => setProfileMember(m.name)
+          cursor: "default"
+        }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           fontWeight: 500,
@@ -8554,454 +8433,9 @@ function App() {
       }, "\uD83D\uDCAC")));
     })));
   }))),
-tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
-  /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14,alignItems:"center"}},
-    /*#__PURE__*/React.createElement("input", {className:"input-s",placeholder:"\uD83D\uDD0D Search by name...",value:profileSearch,onChange:function(e){setProfileSearch(e.target.value);},style:{flex:1,minWidth:160}}),
-    /*#__PURE__*/React.createElement("select", {className:"input-s",value:profileFPFilter,onChange:function(e){setProfileFPFilter(e.target.value);},style:{width:"auto",flex:"none"}},
-      followups.map(function(f){ return /*#__PURE__*/React.createElement("option",{key:f},f); })
-    )
-  ),
-  /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#888",marginBottom:10}},
-    allMembers.length, " yuvaks \u00B7 Click \u270F to edit Full Name, Followup, Contact"
-  ),
-  /*#__PURE__*/React.createElement("div", {className:"card",style:{overflowX:"auto"}},
-    /*#__PURE__*/React.createElement("table", {style:{minWidth:580}},
-      /*#__PURE__*/React.createElement("thead", null,
-        /*#__PURE__*/React.createElement("tr", null,
-          /*#__PURE__*/React.createElement("th", {style:{width:32}}, "#"),
-          /*#__PURE__*/React.createElement("th", null, "Full Name"),
-          /*#__PURE__*/React.createElement("th", null, "Followup"),
-          /*#__PURE__*/React.createElement("th", {style:{width:110}}, "Contact"),
-          /*#__PURE__*/React.createElement("th", {style:{width:110,textAlign:"center"}}, "Last Attended"),
-          /*#__PURE__*/React.createElement("th", {style:{width:52,textAlign:"center"}}, "Edit")
-        )
-      ),
-      /*#__PURE__*/React.createElement("tbody", null,
-        allMembers.filter(function(m){
-          var q=profileSearch.toLowerCase();
-          return (m.name.toLowerCase().includes(q)||(fpOverrides[m.name]||m.followup).toLowerCase().includes(q)) &&
-            (profileFPFilter==="All"||(fpOverrides[m.name]||m.followup)===profileFPFilter);
-        }).map(function(m,i){
-          var fp=fpOverrides[m.name]||m.followup;
-          var contact=m.isExtra?m.contact:(getExtra(m.name,"contact")||m.contact||"");
-          var lastAtt=getLastAttended(m.name);
-          return /*#__PURE__*/React.createElement("tr",{key:m.name,className:"row-hover"},
-            /*#__PURE__*/React.createElement("td",{style:{color:"#aaa",textAlign:"center",fontSize:12}},i+1),
-            /*#__PURE__*/React.createElement("td",{style:{fontWeight:500,fontSize:13}},m.name),
-            /*#__PURE__*/React.createElement("td",{style:{fontSize:12,color:"#555"}},fp),
-            /*#__PURE__*/React.createElement("td",{style:{fontSize:12}},contact||/*#__PURE__*/React.createElement("span",{style:{color:"#ccc"}},"\u2014")),
-            /*#__PURE__*/React.createElement("td",{style:{textAlign:"center",fontSize:12,color:lastAtt==="Never"?"#ccc":"#555"}},lastAtt),
-            /*#__PURE__*/React.createElement("td",{style:{textAlign:"center"}},
-              /*#__PURE__*/React.createElement("button",{className:"btn btn-blue",style:{padding:"4px 10px",fontSize:11},onClick:function(){openProfileEdit(m);}},"\u270F")
-            )
-          );
-        })
-      )
-    )
-  ),
-  profileEditTarget && profileEditForm && /*#__PURE__*/React.createElement("div", {className:"modal-bg",onClick:function(){setProfileEditTarget(null);setProfileEditForm(null);}},
-    /*#__PURE__*/React.createElement("div", {style:{background:"#fff",borderRadius:14,padding:26,maxWidth:460,width:"94%",boxShadow:"0 10px 50px rgba(0,0,0,.22)",maxHeight:"90vh",overflowY:"auto"},onClick:function(e){e.stopPropagation();}},
-      /*#__PURE__*/React.createElement("div", {style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}},
-        /*#__PURE__*/React.createElement("h2", {style:{margin:0,fontSize:17}}, "\u270F\uFE0F Edit Profile"),
-        /*#__PURE__*/React.createElement("span", {style:{fontSize:11,background:profileEditTarget.isExtra?"#ede9fe":"#f0fdf4",color:profileEditTarget.isExtra?"#7c3aed":"#166534",padding:"3px 9px",borderRadius:5,fontWeight:600}},
-          profileEditTarget.isExtra?"Registered":"Master DB"
-        )
-      ),
-      /*#__PURE__*/React.createElement("div", {style:{display:"flex",flexDirection:"column",gap:12}},
-        /*#__PURE__*/React.createElement("div", null,
-          /*#__PURE__*/React.createElement("label", {className:"form-label"}, "Full Name *"),
-          /*#__PURE__*/React.createElement("input", {className:"form-input",value:profileEditForm.fullName,onChange:function(e){setProfileEditForm(function(f){return{...f,fullName:e.target.value};});}})
-        ),
-        /*#__PURE__*/React.createElement("div", null,
-          /*#__PURE__*/React.createElement("label", {className:"form-label"}, "Followup Group"),
-          /*#__PURE__*/React.createElement("select", {className:"form-input",value:profileEditForm.followup,onChange:function(e){setProfileEditForm(function(f){return{...f,followup:e.target.value};});}},
-            allFollowups.map(function(fp){return /*#__PURE__*/React.createElement("option",{key:fp},fp);})
-          )
-        ),
-        /*#__PURE__*/React.createElement("div", null,
-          /*#__PURE__*/React.createElement("label", {className:"form-label"}, "Contact"),
-          /*#__PURE__*/React.createElement("input", {className:"form-input",placeholder:"10-digit mobile",value:profileEditForm.contact,onChange:function(e){setProfileEditForm(function(f){return{...f,contact:e.target.value};});}})
-        ),
-        /*#__PURE__*/React.createElement("div", {style:{background:"#f8fafc",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#555"}},
-          /*#__PURE__*/React.createElement("span", {style:{fontWeight:600,color:"#1a1a1a"}}, "Last Attended: "),
-          /*#__PURE__*/React.createElement("span", {style:{color: getLastAttended(profileEditTarget.name)==="Never"?"#ccc":"#15803d",fontWeight:600}},
-            getLastAttended(profileEditTarget.name)
-          )
-        )
-      ),
-      /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:10,justifyContent:"flex-end",marginTop:18}},
-        /*#__PURE__*/React.createElement("button", {className:"btn btn-gray",onClick:function(){setProfileEditTarget(null);setProfileEditForm(null);}}, "Cancel"),
-        /*#__PURE__*/React.createElement("button", {className:"btn btn-green",onClick:saveProfileEdit}, "Save Changes \u2713")
-      )
-    )
-  )
-), tab === "yoy" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: darkMode ? "#94a3b8" : "#666",
-      marginBottom: 16
-    }
-  }, "Compare attendance between any two custom date ranges \u2014 e.g. this month vs last month, or this year vs last year."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 14,
-      marginBottom: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 18,
-      borderLeft: "4px solid #1e40af"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 13,
-      color: "#1e40af",
-      marginBottom: 10
-    }
-  }, "Range A"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      flexDirection: "column"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "From"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange1From,
-    onChange: e => setYoyRange1From(e.target.value)
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "To"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange1To,
-    onChange: e => setYoyRange1To(e.target.value)
-  })))), /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 18,
-      borderLeft: "4px solid #15803d"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 13,
-      color: "#15803d",
-      marginBottom: 10
-    }
-  }, "Range B"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      flexDirection: "column"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "From"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange2From,
-    onChange: e => setYoyRange2From(e.target.value)
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "To"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange2To,
-    onChange: e => setYoyRange2To(e.target.value)
-  }))))), (yoyRange1From || yoyRange1To || yoyRange2From || yoyRange2To) && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-      gap: 10,
-      marginBottom: 16
-    }
-  }, [{
-    label: "Sessions",
-    a: yoyData.r1.sessions,
-    b: yoyData.r2.sessions
-  }, {
-    label: "Avg Present",
-    a: yoyData.r1.avgPresent,
-    b: yoyData.r2.avgPresent
-  }, {
-    label: "Avg %",
-    a: yoyData.r1.avgPct + "%",
-    b: yoyData.r2.avgPct + "%"
-  }].map(({
-    label,
-    a,
-    b
-  }) => {
-    const aNum = parseInt(a),
-      bNum = parseInt(b);
-    const aWins = !isNaN(aNum) && !isNaN(bNum) && aNum > bNum;
-    const bWins = !isNaN(aNum) && !isNaN(bNum) && bNum > aNum;
-    return /*#__PURE__*/React.createElement("div", {
-      key: label,
-      className: "card",
-      style: {
-        padding: 16,
-        textAlign: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#888",
-        textTransform: "uppercase",
-        letterSpacing: ".06em",
-        marginBottom: 10
-      }
-    }, label), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        justifyContent: "space-around",
-        alignItems: "center",
-        gap: 8
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#1e40af",
-        fontWeight: 600,
-        marginBottom: 2
-      }
-    }, "Range A"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 22,
-        fontWeight: 700,
-        color: aWins ? "#15803d" : bWins ? "#b91c1c" : "#1e40af"
-      }
-    }, a, aWins ? " 🏆" : "")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 16,
-        color: "#ddd"
-      }
-    }, "vs"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#15803d",
-        fontWeight: 600,
-        marginBottom: 2
-      }
-    }, "Range B"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 22,
-        fontWeight: 700,
-        color: bWins ? "#15803d" : aWins ? "#b91c1c" : "#15803d"
-      }
-    }, b, bWins ? " 🏆" : ""))));
-  })), (yoyData.raw1.length > 0 || yoyData.raw2.length > 0) && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 13,
-      marginBottom: 14
-    }
-  }, "Session-by-session comparison"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 12
-    }
-  }, [{
-    label: "Range A",
-    sessions: yoyData.raw1,
-    color: "#1e40af"
-  }, {
-    label: "Range B",
-    sessions: yoyData.raw2,
-    color: "#15803d"
-  }].map(({
-    label,
-    sessions,
-    color
-  }) => /*#__PURE__*/React.createElement("div", {
-    key: label
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      fontWeight: 600,
-      color,
-      marginBottom: 8
-    }
-  }, label, " (", sessions.length, " sessions)"), sessions.length === 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: "#aaa"
-    }
-  }, "No sessions in this range."), sessions.map((s, i) => {
-    const cnt = s.records.filter(r => r.status === "P").length;
-    const pct2 = allMembers.length ? Math.round(cnt / allMembers.length * 100) : 0;
-    return /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 6
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 80,
-        fontSize: 10,
-        color: "#888",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis"
-      }
-    }, s.date.split(" ").slice(0, 2).join(" ")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        background: "#f3f4f6",
-        borderRadius: 4,
-        height: 16,
-        overflow: "hidden"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        height: "100%",
-        width: `${pct2}%`,
-        background: color,
-        borderRadius: 4,
-        opacity: 0.85
-      }
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 36,
-        fontSize: 11,
-        fontWeight: 600,
-        color,
-        textAlign: "right"
-      }
-    }, pct2, "%"));
-  })))))), !yoyRange1From && !yoyRange1To && !yoyRange2From && !yoyRange2To && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 36,
-      textAlign: "center",
-      color: "#aaa"
-    }
-  }, "Select date ranges above to compare.")), showPrintModal && /*#__PURE__*/React.createElement("div", {
-    className: "modal-bg",
-    onClick: () => setShowPrintModal(false)
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "modal",
-    onClick: e => e.stopPropagation()
-  }, /*#__PURE__*/React.createElement("h2", {
-    style: {
-      margin: "0 0 10px",
-      fontSize: 17
-    }
-  }, "\uD83D\uDDA8 Print / Save Report"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 13,
-      color: "#666",
-      margin: "0 0 16px"
-    }
-  }, "Generates a print-ready A4 report with: today's attendance, followup summary, present/absent lists, and dashboard snapshot."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr 1fr",
-      gap: 8,
-      marginBottom: 18
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Present"), /*#__PURE__*/React.createElement("div", {
-    className: "stat-num",
-    style: {
-      color: "#15803d"
-    }
-  }, totalP)), /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Absent"), /*#__PURE__*/React.createElement("div", {
-    className: "stat-num",
-    style: {
-      color: "#b91c1c"
-    }
-  }, totalA)), /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Sabha"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 600,
-      marginTop: 4
-    }
-  }, sabhaType))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 10,
-      justifyContent: "flex-end"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-gray",
-    onClick: () => setShowPrintModal(false)
-  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-blue",
-    onClick: doPrintReport
-  }, "Open Print View")))),
 
-  tab === "followupscore" && /*#__PURE__*/React.createElement(React.Fragment, null,
-    /*#__PURE__*/React.createElement("div", {style:{marginBottom:16}},
-      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:15,marginBottom:4}}, "\uD83C\uDFC6 Followup Scoreboard"),
-      /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#888"}}, "Retention % per follow-up person across all sessions, ranked highest to lowest")
-    ),
-    /*#__PURE__*/React.createElement("div",{style:{marginTop:24,marginBottom:16}},
-      /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:4}},"🏆 Follow-up Scoreboard"),
-      /*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"#888"}},"Retention % per follow-up person across all sessions")
-    ),
-    fpScorecard.length === 0
-      ? /*#__PURE__*/React.createElement("div",{className:"card",style:{padding:40,textAlign:"center",color:"#aaa"}},"Submit at least one session to see scores.")
-      : /*#__PURE__*/React.createElement("div",{className:"card",style:{overflow:"hidden"}},
-          /*#__PURE__*/React.createElement("div",{style:{display:"flex",padding:"8px 14px",background:"#f8f8f4",fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",borderBottom:"1px solid #eee"}},
-            /*#__PURE__*/React.createElement("span",{style:{width:28}},"#"),
-            /*#__PURE__*/React.createElement("span",{style:{flex:1}},"Follow-up Person"),
-            /*#__PURE__*/React.createElement("span",{style:{width:55,textAlign:"center"}},"Count"),
-            /*#__PURE__*/React.createElement("span",{style:{width:55,textAlign:"center"}},"Avg %"),
-            /*#__PURE__*/React.createElement("span",{style:{width:120}},"Progress")
-          ),
-          fpScorecard.map(function(fp,i){
-            var clr3 = fp.avg>=70?"#15803d":fp.avg>=50?"#d97706":"#b91c1c";
-            var medal = i===0?"🥇":i===1?"🥈":i===2?"🥉":String(i+1);
-            return /*#__PURE__*/React.createElement("div",{key:fp.fp,style:{display:"flex",alignItems:"center",padding:"11px 14px",borderBottom:"1px solid #f0f0f0",background:i===0?"#f0fdf4":"#fff"}},
-              /*#__PURE__*/React.createElement("div",{style:{width:28,fontWeight:700,fontSize:14}},medal),
-              /*#__PURE__*/React.createElement("div",{style:{flex:1,fontWeight:600,fontSize:13}},fp.fp),
-              /*#__PURE__*/React.createElement("div",{style:{width:55,textAlign:"center",fontSize:12,color:"#555"}},fp.members),
-              /*#__PURE__*/React.createElement("div",{style:{width:55,textAlign:"center",fontWeight:700,fontSize:14,color:clr3}},fp.avg+"%"),
-              /*#__PURE__*/React.createElement("div",{style:{width:120}},
-                /*#__PURE__*/React.createElement("div",{style:{background:"#f0f0f0",borderRadius:6,height:8,overflow:"hidden"}},
-                  /*#__PURE__*/React.createElement("div",{style:{width:fp.avg+"%",background:clr3,height:8,borderRadius:6}})
-                ),
-                /*#__PURE__*/React.createElement("div",{style:{fontSize:9,color:"#aaa",marginTop:2}},fp.presentSlots+"/"+fp.totalSlots)
-              )
-            );
-          })
-        )
-  ), tab === "excel" && /*#__PURE__*/React.createElement(React.Fragment, null,
+
+  tab === "excel" && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement("div", {style:{marginBottom:18}},
       /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:15,marginBottom:4}}, "📥 Excel — Member Directory"),
       /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#888"}}, "Export member list or import updated Reference data. Historic attendance is never affected.")
@@ -9729,308 +9163,7 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
       /*#__PURE__*/React.createElement("button", {className:"btn btn-gray", onClick: function(){ setImportPreview(null); }}, "Cancel"),
       /*#__PURE__*/React.createElement("button", {className:"btn btn-green", style:{fontWeight:700}, onClick: commitImport}, "✓ Confirm Import")
     )
-  )), profileMember && (() => {
-    const pd = getProfileData(profileMember);
-    if (!pd) return null;
-    const {
-      m,
-      cat,
-      totalP: tp,
-      totalS: ts,
-      pct: pc,
-      recentP,
-      recentS,
-      recentPct,
-      sessions
-    } = pd;
-    return /*#__PURE__*/React.createElement("div", {
-      className: "modal-bg",
-      onClick: () => setProfileMember(null)
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "#fff",
-        borderRadius: 16,
-        maxWidth: 540,
-        width: "94%",
-        maxHeight: "90vh",
-        overflowY: "auto",
-        boxShadow: "0 20px 60px rgba(0,0,0,.2)"
-      },
-      onClick: e => e.stopPropagation()
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "#312e81",
-        borderRadius: "16px 16px 0 0",
-        padding: "20px 22px",
-        color: "#fff"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "space-between"
-      }
-    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 18,
-        fontWeight: 700
-      }
-    }, m.name), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#94a3b8",
-        marginTop: 2
-      }
-    }, m.followup), m.contact && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#94a3b8"
-      }
-    }, "\uD83D\uDCDE ", m.contact), m.isExtra && m.dob && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#94a3b8"
-      }
-    }, "\uD83C\uDF82 ", m.dob), (m.isExtra ? m.address : getExtra(m.name, "address")) && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#94a3b8",
-        marginTop: 2
-      }
-    }, "\uD83D\uDCCD ", m.isExtra ? m.address : getExtra(m.name, "address")), m.isExtra && m.reference && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#94a3b8"
-      }
-    }, "\uD83D\uDC64 Ref: ", m.reference)), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        gap: 6
-      }
-    }))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr 1fr 1fr",
-        gap: 0,
-        borderBottom: "1px solid #f0f0f0"
-      }
-    }, [["All-time ✅", tp, "#15803d"], [`Last ${recentS} sess`, recentP, "#1e40af"], ["Overall %", pc + "%", pc >= 70 ? "#15803d" : pc >= 40 ? "#92400e" : "#b91c1c"], ["Recent %", recentPct + "%", recentPct >= 70 ? "#15803d" : recentPct >= 40 ? "#92400e" : "#b91c1c"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
-      key: l,
-      style: {
-        padding: "14px 10px",
-        textAlign: "center",
-        borderRight: "1px solid #f0f0f0"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 9,
-        color: "#888",
-        textTransform: "uppercase",
-        letterSpacing: ".05em",
-        marginBottom: 4
-      }
-    }, l), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 20,
-        fontWeight: 700,
-        color: c
-      }
-    }, v)))), m.contact && /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "12px 22px",
-        display: "flex",
-        gap: 8,
-        borderBottom: "1px solid #f0f0f0"
-      }
-    }, /*#__PURE__*/React.createElement("a", {
-      href: `tel:${m.contact}`,
-      className: "btn btn-green",
-      style: {
-        textDecoration: "none",
-        flex: 1,
-        justifyContent: "center"
-      }
-    }, "\uD83D\uDCDE Call"), /*#__PURE__*/React.createElement("button", {
-      className: "btn btn-wa",
-      style: {
-        flex: 1
-      },
-      onClick: () => doWAAbsent(m)
-    }, "\uD83D\uDCAC WhatsApp")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "0 22px 16px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 600,
-        fontSize: 13,
-        marginBottom: 10
-      }
-    }, "\uD83D\uDDFA Category Journey"), (() => {
-      const journey = getJourney(m.name);
-      if (!journey.length) return /*#__PURE__*/React.createElement("div", {
-        style: {
-          color: "#aaa",
-          fontSize: 12
-        }
-      }, "No history yet.");
-      const catColor = {
-        R: "#15803d",
-        I: "#d97706",
-        N: "#dc2626"
-      };
-      const catLabel = {
-        R: "Regular",
-        I: "Irregular",
-        N: "No"
-      };
-      // Group consecutive same-cat segments
-      const segments = [];
-      journey.forEach((j, i) => {
-        if (!segments.length || segments[segments.length - 1].cat !== j.cat) {
-          segments.push({
-            cat: j.cat,
-            from: j.date,
-            to: j.date,
-            count: 1,
-            present: j.present ? 1 : 0
-          });
-        } else {
-          segments[segments.length - 1].to = j.date;
-          segments[segments.length - 1].count++;
-          if (j.present) segments[segments.length - 1].present++;
-        }
-      });
-      return /*#__PURE__*/React.createElement("div", {
-        style: {
-          overflowX: "auto"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          minWidth: 320,
-          gap: 0
-        }
-      }, segments.map((seg, i) => /*#__PURE__*/React.createElement("div", {
-        key: i,
-        style: {
-          flex: seg.count,
-          minWidth: 40,
-          position: "relative"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          height: 24,
-          background: catColor[seg.cat],
-          opacity: 0.85,
-          borderRadius: i === 0 ? "6px 0 0 6px" : i === segments.length - 1 ? "0 6px 6px 0" : "0",
-          margin: "0 1px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          color: "#fff",
-          fontWeight: 700
-        }
-      }, catLabel[seg.cat][0])), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 8,
-          color: "#888",
-          textAlign: "center",
-          marginTop: 2,
-          whiteSpace: "nowrap"
-        }
-      }, seg.from.split(" ").slice(0, 2).join(" "))))), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 12,
-          marginTop: 8
-        }
-      }, Object.entries(catLabel).map(([k, v]) => /*#__PURE__*/React.createElement("span", {
-        key: k,
-        style: {
-          fontSize: 10,
-          display: "flex",
-          alignItems: "center",
-          gap: 4
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          width: 10,
-          height: 10,
-          borderRadius: 2,
-          background: catColor[k],
-          display: "inline-block"
-        }
-      }), v, ": ", segments.filter(s => s.cat === k).reduce((a, s) => a + s.count, 0), " sessions"))));
-    })()), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "16px 22px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 600,
-        fontSize: 13,
-        marginBottom: 10
-      }
-    }, "Session History (most recent first)"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        maxHeight: 240,
-        overflowY: "auto"
-      }
-    }, sessions.length === 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: "#aaa",
-        fontSize: 13
-      }
-    }, "No sessions recorded yet."), sessions.map((s, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "7px 0",
-        borderBottom: "1px solid #f5f5f5"
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        minWidth: 100,
-        fontSize: 12,
-        color: "#555"
-      }
-    }, s.date), /*#__PURE__*/React.createElement("span", {
-      style: {
-        padding: "2px 8px",
-        borderRadius: 4,
-        fontSize: 11,
-        fontWeight: 600,
-        background: s.status === "P" ? "#dcfce7" : s.status === "A" ? "#fee2e2" : "#f3f4f6",
-        color: s.status === "P" ? "#15803d" : s.status === "A" ? "#b91c1c" : "#888"
-      }
-    }, s.status === "P" ? "Present" : s.status === "A" ? "Absent" : "—"), s.note && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "#888",
-        fontStyle: "italic"
-      }
-    }, "\uD83D\uDCDD ", s.note))))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "12px 22px",
-        borderTop: "1px solid #f0f0f0",
-        textAlign: "right"
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      className: "btn btn-gray",
-      onClick: () => setProfileMember(null)
-    }, "Close"))));
-  })()
-  ));
+  ))  ));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
