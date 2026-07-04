@@ -1836,6 +1836,8 @@ function App() {
   function setAbsenceReason(name, reason){ if (!requireAdmin()) return; const upd={...absenceReasons,[name]:reason}; setAbsenceReasons(upd); saveAbsenceReasons(upd); }
   const [sessionStartTime, setSessionStartTime] = useState(() => fsGet("shreeji_start_time", "20:00"));
   const [showGroupedWAModal, setShowGroupedWAModal] = useState(false);
+  // Dashboard stat-card drilldown modal (Regular/Irregular/No Category/Last/Best/Lowest Session)
+  const [dashModal, setDashModal] = useState(null);
   // Merged WhatsApp menu — replaces 3 separate buttons (WhatsApp / FP-Wise
   // WA / Grouped WA) with one button that opens a small dropdown. None of
   // the underlying send logic changed — this only changes how the existing
@@ -3709,6 +3711,36 @@ function App() {
     };
   }, [prevHistory, allMembers, allFollowups, catOverrides]);
 
+  // ── Dashboard stat-card drilldown data ──────────────────────────────────
+  // Builds the list shown inside the modal when a dashboard card is clicked.
+  // Avg Attendance and >50% Streak are intentionally excluded (not clickable).
+  const dashModalData = useMemo(() => {
+    if (!dashModal || !dashData) return null;
+    if (dashModal === "regular") {
+      const list = allMembers.filter(m => getCategory(m.name, prevHistory) === "R").map(m => m.name).sort((a, b) => a.localeCompare(b));
+      return { title: "Regular Yuvaks", subtitle: `${list.length} of ${allMembers.length} total`, color: "#15803d", bg: "#f0fdf4", list };
+    }
+    if (dashModal === "irregular") {
+      const list = allMembers.filter(m => getCategory(m.name, prevHistory) === "I").map(m => m.name).sort((a, b) => a.localeCompare(b));
+      return { title: "Irregular Yuvaks", subtitle: `${list.length} need attention`, color: "#92400e", bg: "#fffbeb", list };
+    }
+    if (dashModal === "no") {
+      const list = allMembers.filter(m => getCategory(m.name, prevHistory) === "N").map(m => m.name).sort((a, b) => a.localeCompare(b));
+      return { title: "No Category Yuvaks", subtitle: `${list.length} not attending`, color: "#b91c1c", bg: "#fef2f2", list };
+    }
+    if (dashModal === "last" || dashModal === "best" || dashModal === "worst") {
+      const dateMap = { last: dashData.latest.date, best: dashData.best.date, worst: dashData.worst.date };
+      const titleMap = { last: "Last Session", best: "Best Session", worst: "Lowest Session" };
+      const colorMap = { last: dashData.trend_dir >= 0 ? "#15803d" : "#b91c1c", best: "#15803d", worst: "#b91c1c" };
+      const bgMap = { last: dashData.trend_dir >= 0 ? "#f0fdf4" : "#fef2f2", best: "#f0fdf4", worst: "#fef2f2" };
+      const date = dateMap[dashModal];
+      const session = prevHistory.find(s => s.date === date);
+      const list = session ? session.records.filter(r => r.status === "P").map(r => r.name).sort((a, b) => a.localeCompare(b)) : [];
+      return { title: `${titleMap[dashModal]} — Present (${date})`, subtitle: `${list.length} of ${allMembers.length} attended`, color: colorMap[dashModal], bg: bgMap[dashModal], list };
+    }
+    return null;
+  }, [dashModal, dashData, allMembers, prevHistory]);
+
   // ── Dark mode effect ─────────────────────────────────────────────────────
   useEffect(() => {
     localStorage.setItem("shreeji_dark", darkMode ? "1" : "0");
@@ -4648,59 +4680,73 @@ function App() {
     value: dashData.avg,
     sub: `${dashData.avgPct}% of ${allMembers.length}`,
     color: "#1e40af",
-    bg: "#eff6ff"
+    bg: "#eff6ff",
+    id: null
   }, {
     label: "Last Session",
     value: dashData.latest.totalPresent,
     sub: `${dashData.latest.pct}%  ${dashData.trend_dir > 0 ? "▲ up" : ""}${dashData.trend_dir < 0 ? "▼ down" : ""}${dashData.trend_dir === 0 ? "-> same" : ""}`,
     color: dashData.trend_dir >= 0 ? "#15803d" : "#b91c1c",
-    bg: dashData.trend_dir >= 0 ? "#f0fdf4" : "#fef2f2"
+    bg: dashData.trend_dir >= 0 ? "#f0fdf4" : "#fef2f2",
+    id: "last"
   }, {
     label: "Best Session",
     value: dashData.best.totalPresent,
     sub: dashData.best.date,
     color: "#15803d",
-    bg: "#f0fdf4"
+    bg: "#f0fdf4",
+    id: "best"
   }, {
     label: "Lowest Session",
     value: dashData.worst.totalPresent,
     sub: dashData.worst.date,
     color: "#b91c1c",
-    bg: "#fef2f2"
+    bg: "#fef2f2",
+    id: "worst"
   }, {
     label: "Regular Yuvaks",
     value: dashData.liveR,
     sub: `of ${allMembers.length} total`,
     color: "#15803d",
-    bg: "#f0fdf4"
+    bg: "#f0fdf4",
+    id: "regular"
   }, {
     label: "Irregular",
     value: dashData.liveI,
     sub: "need attention",
     color: "#92400e",
-    bg: "#fffbeb"
+    bg: "#fffbeb",
+    id: "irregular"
   }, {
     label: "No Category",
     value: dashData.liveN,
     sub: "not attending",
     color: "#b91c1c",
-    bg: "#fef2f2"
+    bg: "#fef2f2",
+    id: "no"
   }, {
     label: ">50% Streak",
     value: dashData.streak,
     sub: "consecutive sessions",
     color: "#7c3aed",
-    bg: "#f5f3ff"
+    bg: "#f5f3ff",
+    id: null
   }].map(k => /*#__PURE__*/React.createElement("div", {
     key: k.label,
+    onClick: k.id ? () => setDashModal(k.id) : undefined,
+    title: k.id ? "Click to view list" : undefined,
     style: {
       background: darkMode ? "rgba(99,102,241,.1)" : k.bg,
       backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
       borderRadius: 16,
       padding: "16px 16px",
       border: darkMode ? "1px solid var(--glass-border)" : `1px solid ${k.color}1a`,
-      boxShadow: "0 2px 12px rgba(79,70,229,.05)"
-    }
+      boxShadow: "0 2px 12px rgba(79,70,229,.05)",
+      cursor: k.id ? "pointer" : "default",
+      transition: "transform .15s ease, box-shadow .15s ease"
+    },
+    onMouseEnter: k.id ? e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(79,70,229,.15)"; } : undefined,
+    onMouseLeave: k.id ? e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 2px 12px rgba(79,70,229,.05)"; } : undefined
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
@@ -7761,7 +7807,66 @@ function App() {
   }, "Cancel"), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-red",
     onClick: () => doDeleteEdit(editDeleteConfirm.name, editDeleteConfirm.isExtra)
-  }, "Yes, Delete")))), showGroupedWAModal && /*#__PURE__*/React.createElement("div", {
+  }, "Yes, Delete")))), dashModalData && /*#__PURE__*/React.createElement("div", {
+    className: "modal-bg",
+    onClick: () => setDashModal(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: darkMode ? "#1e293b" : "#fff",
+      borderRadius: 16,
+      maxWidth: 420,
+      width: "92%",
+      maxHeight: "80vh",
+      overflowY: "auto",
+      boxShadow: "0 20px 60px rgba(0,0,0,.25)",
+      padding: 0
+    },
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: dashModalData.color,
+      borderRadius: "16px 16px 0 0",
+      padding: "16px 20px",
+      color: "#fff",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 15 }
+  }, dashModalData.title), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12, opacity: .85, marginTop: 2 }
+  }, dashModalData.subtitle)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setDashModal(null),
+    style: {
+      background: "rgba(255,255,255,.2)",
+      border: "none",
+      borderRadius: 8,
+      color: "#fff",
+      fontSize: 16,
+      cursor: "pointer",
+      padding: "4px 10px",
+      lineHeight: 1
+    }
+  }, "\u2715")), dashModalData.list.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: { padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }
+  }, "No yuvaks in this list.") : /*#__PURE__*/React.createElement("div", {
+    style: { padding: "8px 0" }
+  }, dashModalData.list.map((name, i) => /*#__PURE__*/React.createElement("div", {
+    key: name,
+    className: "row-hover",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "10px 20px",
+      borderBottom: i === dashModalData.list.length - 1 ? "none" : darkMode ? "1px solid var(--glass-border)" : "1px solid #f1f5f9"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 11, color: "var(--text-muted)", width: 22, flexShrink: 0 }
+  }, i + 1, "."), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 14 }
+  }, name)))))), showGroupedWAModal && /*#__PURE__*/React.createElement("div", {
     className: "modal-bg",
     onClick: function(){ setShowGroupedWAModal(false); }
   }, /*#__PURE__*/React.createElement("div", {
