@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -2233,14 +2233,14 @@ function App() {
     const absent = allMembers.filter(m => { var s=attendance[m.name]; return s && s.status==="A"; });
     const unmarked = allMembers.filter(m => { var s=attendance[m.name]; return !s || !s.status; });
     let msg = "*|| Akshar Anand ||*\n" +
-      "*Absentee Alert – " + sessionDate + "*\n" +
+      "*Absentee Alert - " + sessionDate + "*\n" +
       "━━━━━━━━━━━━━━━\n";
     if (absent.length) {
-      msg += "❌ *Absent (" + absent.length + ")*\n";
+      msg += "*Absent (" + absent.length + ")*\n";
       absent.forEach(function(m,i){ msg += (i+1) + ". " + m.name + " (" + m.followup + ")\n"; });
     }
     if (unmarked.length) {
-      msg += "\n⬜ *Not marked (" + unmarked.length + ")*\n";
+      msg += "\n*Not marked (" + unmarked.length + ")*\n";
       unmarked.forEach(function(m,i){ msg += (i+1) + ". " + m.name + "\n"; });
     }
     msg += "━━━━━━━━━━━━━━━\n*" + totalP + "P / " + totalA + "A — " + pct + "%*";
@@ -2263,17 +2263,17 @@ function App() {
       var _attendance$m$name6;
       return !((_attendance$m$name6 = attendance[m.name]) !== null && _attendance$m$name6 !== void 0 && _attendance$m$name6.status);
     });
-    let msg = `*|| Akshar Anand ||*\n*Attendance – ${sessionDate}*\n━━━━━━━━━━━━━━━\n`;
-    msg += `✅ *Present (${present.length})*\n`;
+    let msg = `*|| Akshar Anand ||*\n*Attendance - ${sessionDate}*\n━━━━━━━━━━━━━━━\n`;
+    msg += `*Present (${present.length})*\n`;
     present.forEach((m, i) => {
       msg += `${i + 1}. ${m.name}\n`;
     });
-    msg += `\n❌ *Absent (${absent.length})*\n`;
+    msg += `\n*Absent (${absent.length})*\n`;
     absent.forEach((m, i) => {
       msg += `${i + 1}. ${m.name}\n`;
     });
     if (unmarked.length) {
-      msg += `\n⬜ *Not marked (${unmarked.length})*\n`;
+      msg += `\n*Not marked (${unmarked.length})*\n`;
       unmarked.forEach((m, i) => {
         msg += `${i + 1}. ${m.name}\n`;
       });
@@ -2510,9 +2510,8 @@ function App() {
 
   function buildReportModalMsg() {
     if (!reportModalData) return "";
-    const emoji = reportModalData.status === "P" ? "\u2705" : "\u274C";
     let msg = `*|| Akshar Anand ||*\n`;
-    msg += `${emoji} *${reportModalData.title} \u2014 ${sessionDate}*\n`;
+    msg += `*${reportModalData.title} \u2014 ${sessionDate}*\n`;
     msg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n`;
     reportModalData.groups.forEach(g => {
       msg += `*${g.fp}* (${g.members.length})\n`;
@@ -3197,7 +3196,7 @@ function App() {
     msg += `━━━━━━━━━━━━━━━━━\n`;
 
     // Present section
-    msg += `✅ *PRESENT — ${present.length}*\n`;
+    msg += `*PRESENT — ${present.length}*\n`;
     ["R", "I", "N"].forEach(cat => {
       if (pByCat[cat].length) {
         msg += `\n*${catLabel[cat]} (${pByCat[cat].length})*\n`;
@@ -3209,7 +3208,7 @@ function App() {
     msg += `\n━━━━━━━━━━━━━━━━━\n`;
 
     // Absent section
-    msg += `❌ *ABSENT — ${absent.length}*\n`;
+    msg += `*ABSENT — ${absent.length}*\n`;
     ["R", "I", "N"].forEach(cat => {
       if (aByCat[cat].length) {
         msg += `\n*${catLabel[cat]} (${aByCat[cat].length})*\n`;
@@ -3233,7 +3232,7 @@ function App() {
     msg += `*Regular Yuvaks Absent — ${sessionDate}*\n`;
     msg += `━━━━━━━━━━━━━━━━━\n\n`;
     if (regularAbsent.length === 0) {
-      msg += `✅ All Regular yuvaks are present today!`;
+      msg += `All Regular yuvaks are present today!`;
       return msg;
     }
     const byFP = {};
@@ -3304,13 +3303,13 @@ function App() {
       });
       const pct2 = members.length > 0 ? Math.round(present.length / members.length * 100) : 0;
       msg += `*${fi + 1}. ${fp}* — ${pct2}%\n`;
-      msg += `✅ Present (${present.length}): `;
+      msg += `Present (${present.length}): `;
       const pParts = [];
       ["R", "I", "N"].forEach(cat => {
         if (pByCat[cat].length) pParts.push(`${cat === "R" ? "Reg" : cat === "I" ? "Irr" : "No"} ${pByCat[cat].length}`);
       });
       msg += (pParts.length ? pParts.join(" | ") : "—") + "\n";
-      msg += `❌ Absent (${absent.length}): `;
+      msg += `Absent (${absent.length}): `;
       const aParts = [];
       ["R", "I", "N"].forEach(cat => {
         if (aByCat[cat].length) aParts.push(`${cat === "R" ? "Reg" : cat === "I" ? "Irr" : "No"} ${aByCat[cat].length}`);
@@ -3329,7 +3328,7 @@ function App() {
 
   // ── Individual absent WhatsApp message ───────────────────────────────────
   function doWAAbsent(m) {
-    const msg = `Jai Swaminarayan ${m.name.split(" ")[0]} bhai,\n\nAaj *|| Akshar Anand ||* sabha mein aapki kami mehsoos ki gayi. Aasha hai sab theek hai.\n\nAgle sabha mein zaroor padharna.\n\n– ${sessionDate}`;
+    const msg = `Jai Swaminarayan ${m.name.split(" ")[0]} bhai,\n\nAaj *|| Akshar Anand ||* sabha mein aapki kami mehsoos ki gayi. Aasha hai sab theek hai.\n\nAgle sabha mein zaroor padharna.\n\n- ${sessionDate}`;
     window.open(`https://wa.me/91${m.contact}?text=${encodeURIComponent(msg)}`, "_blank");
   }
 
