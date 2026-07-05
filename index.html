@@ -45,6 +45,15 @@
 
   // Shared document — every signed-in (allowed) user reads/writes the same data.
   const SHARED_DOC_PATH = ["shreeji", "shared-data"];
+  // A SEPARATE, intentionally public document containing ONLY the list of
+  // registered phone numbers (no names, emails, or roles). This is what
+  // lets the phone+password gate reject an unregistered number BEFORE
+  // Google Sign-In even opens — that has to happen pre-auth, and Firestore
+  // can only be read pre-auth if the rules explicitly allow it for this
+  // one doc (see the matching "allow read: if true" rule for this path).
+  // It's kept up to date automatically by upsertAccessEntry/removeAccessEntry
+  // in the React app every time Manage Access changes — no manual syncing.
+  const PUBLIC_PHONES_DOC_PATH = ["shreeji", "public-phones"];
 
   // Calling getAuth()/getFirestore() with a placeholder apiKey throws
   // immediately (auth/invalid-api-key) — so check BEFORE touching the SDK,
@@ -97,7 +106,13 @@
         listenSharedDoc: (cb) => onSnapshot(doc(db, ...SHARED_DOC_PATH), cb, (err) => {
           console.error("Firestore listen error:", err);
           window.dispatchEvent(new CustomEvent("shreeji-firestore-error", { detail: err.message || String(err) }));
-        })
+        }),
+        // Public phone allowlist — readable with NO sign-in required (see
+        // PUBLIC_PHONES_DOC_PATH comment above). getPublicPhones() is called
+        // by the gate before Google Sign-In; setPublicPhones() is called by
+        // the app whenever a super admin edits Manage Access.
+        getPublicPhones: () => getDoc(doc(db, ...PUBLIC_PHONES_DOC_PATH)),
+        setPublicPhones: (phones) => setDoc(doc(db, ...PUBLIC_PHONES_DOC_PATH), { phones, _updatedAt: serverTimestamp() }, { merge: true })
       };
       console.log("[ShreejiAuth] Firebase module initialized OK.");
       window.dispatchEvent(new CustomEvent("shreeji-firebase-ready"));
@@ -1977,6 +1992,23 @@ function App() {
     }
     return true;
   }
+  // Pushes the current set of registered phone numbers (from every Manage
+  // Access entry) up to the separate public-phones Firestore doc, so the
+  // gate's pre-Google-Sign-In check always reflects Manage Access instantly
+  // — no manual list to edit in the code anymore. Best-effort: if this
+  // write fails (e.g. offline), Manage Access itself still saved fine via
+  // fsSet above; the public doc will simply catch up next time someone
+  // with a connection edits Manage Access.
+  function syncPublicPhones(list) {
+    try {
+      const phones = Object.keys(list)
+        .map(k => (list[k] && list[k].phone) || "")
+        .filter(p => /^\d{10}$/.test(p));
+      window.ShreejiFirebase.setPublicPhones(phones).catch(e => {
+        console.warn("[ShreejiAuth] Could not sync public phone list:", e);
+      });
+    } catch (e) { console.warn("[ShreejiAuth] syncPublicPhones failed:", e); }
+  }
   function upsertAccessEntry(email, phone, role, name) {
     if (!requireSuperAdmin()) return;
     email = email.trim().toLowerCase();
@@ -2006,6 +2038,7 @@ function App() {
     });
     setAccessList(next);
     fsSet(LS_ACCESS_LIST, next);
+    syncPublicPhones(next);
     toast_(`${name.trim() || phone.trim()} set as ${isAdminRole ? "Admin" : "Viewer"}.`);
   }
   function removeAccessEntry(key) {
@@ -2014,6 +2047,7 @@ function App() {
     delete next[key];
     setAccessList(next);
     fsSet(LS_ACCESS_LIST, next);
+    syncPublicPhones(next);
     toast_(`Access entry for ${key} removed.`);
   }
 
@@ -10581,25 +10615,31 @@ function AuthGate() {
   // ── Phone allowlist checked BEFORE Google Sign-In is ever triggered ──
   // This is the earliest point a phone number can possibly be rejected —
   // it happens right here at gate-submit time, so an unregistered number
-  // never even reaches the Google account picker. It has to be a plain
-  // hardcoded list (not read from Firestore) because Firestore can only be
-  // read once signed in, which is exactly the step we're trying to gate
-  // ahead of. This means it's a MANUAL mirror of "Settings → Manage
-  // Access" — update this list whenever you add/remove someone there, the
-  // same way ADMIN_EMAILS above has to be kept in sync with the Firestore
-  // rules file. (After Google Sign-In, the app also double-checks that the
-  // signed-in account's registered phone matches — see
-  // isGatePhoneRegistered further down — as a second line of defense in
-  // case this list and Manage Access ever drift out of sync.)
-  const GATE_ALLOWED_PHONES = [
+  // never even reaches the Google account picker. The list itself is
+  // fetched LIVE from the public-phones Firestore doc (readable with no
+  // sign-in required — see PUBLIC_PHONES_DOC_PATH in the module script up
+  // top), which the app keeps in sync automatically every time Manage
+  // Access changes. No manual list to maintain in code anymore.
+  // FALLBACK_GATE_PHONES only matters if that fetch fails (e.g. the device
+  // is completely offline on first load) — it's a last-resort safety net,
+  // not the source of truth, so it's fine if it's a little stale.
+  const FALLBACK_GATE_PHONES = [
     "8828345989", // akashhumarmalekar@gmail.com — super admin
-    "9326206944", // itssuru0369@gmail.com — super admin
-    "8879823171", // adityashrotriya720@gmail.com
-    "8446658986", // mevadivyesh@gmail.com
-    "9820198422"  // vinit.s.hindocha@gmail.com
-    // Add more "10-digit phone" entries here as you add them under
-    // Settings → Manage Access.
+    "9326206944"  // itssuru0369@gmail.com — super admin
   ];
+  const [publicPhones, setPublicPhones] = useState(null); // null = not fetched yet
+  useEffect(function () {
+    if (!fbReady) return;
+    window.ShreejiFirebase.getPublicPhones()
+      .then(function (snap) {
+        var data = snap.exists() ? snap.data() : null;
+        setPublicPhones((data && Array.isArray(data.phones)) ? data.phones : []);
+      })
+      .catch(function (e) {
+        console.warn("[ShreejiAuth] Could not fetch public phone list, using fallback:", e);
+        setPublicPhones([]); // empty, not null — handleGateSubmit falls back to FALLBACK_GATE_PHONES below
+      });
+  }, [fbReady]);
   const [gateUnlocked, setGateUnlocked] = useState(function () {
     try { return sessionStorage.getItem("shreeji_gate_unlocked") === "1"; } catch (e) { return false; }
   });
@@ -10623,7 +10663,14 @@ function AuthGate() {
       setGateError("Enter a valid 10-digit phone number.");
       return;
     }
-    if (GATE_ALLOWED_PHONES.indexOf(phone) === -1) {
+    // publicPhones is the LIVE list (fetched from Firestore, no sign-in
+    // needed). If it hasn't loaded yet (still null) or the fetch failed
+    // (empty array), fall back to the hardcoded super-admin numbers so
+    // legitimate access never gets blocked by a network hiccup.
+    var allowedPhones = (publicPhones && publicPhones.length > 0)
+      ? publicPhones.concat(FALLBACK_GATE_PHONES)
+      : FALLBACK_GATE_PHONES;
+    if (allowedPhones.indexOf(phone) === -1) {
       setGateError("Sorry, you don't have access.");
       return;
     }
@@ -10966,11 +11013,13 @@ function AuthGate() {
         }),
         /*#__PURE__*/React.createElement("button", {
           type: "submit",
+          disabled: publicPhones === null,
           style: {
             width: "100%", padding: "12px 16px", borderRadius: 12, border: "none",
-            background: "#2563eb", color: "#fff", fontSize: 14.5, fontWeight: 700, cursor: "pointer"
+            background: "#2563eb", color: "#fff", fontSize: 14.5, fontWeight: 700,
+            cursor: publicPhones === null ? "default" : "pointer", opacity: publicPhones === null ? .7 : 1
           }
-        }, "Continue")
+        }, publicPhones === null ? "Loading…" : "Continue")
       )
     );
   }
