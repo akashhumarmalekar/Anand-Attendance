@@ -1869,6 +1869,8 @@ function App() {
   const [dashModal, setDashModal] = useState(null);
   // Report tab stat-card drilldown modal (Regular/Irregular/No Present/Absent + Grand totals)
   const [reportModal, setReportModal] = useState(null);
+  // Attendance tab stat-card drilldown modal (Present/Absent/Unmarked/Attendance/Total + time slots)
+  const [attModal, setAttModal] = useState(null);
   // Merged WhatsApp menu — replaces 3 separate buttons (WhatsApp / FP-Wise
   // WA / Grouped WA) with one button that opens a small dropdown. None of
   // the underlying send logic changed — this only changes how the existing
@@ -2560,6 +2562,103 @@ function App() {
     });
     return { s1, s2, s3, noTime };
   }, [attendance, allMembers]);
+
+  // ── Attendance tab card drilldown (live, based on today's attendance) ───
+  const ATT_CARD_META = {
+    present: { title: "Present", color: "#15803d" },
+    absent: { title: "Absent", color: "#b91c1c" },
+    unmarked: { title: "Unmarked", color: "#64748b" },
+    attendance: { title: "Present (Attendance %)", color: "#1e40af" },
+    total: { title: "All Yuvaks", color: "#1a1a1a" },
+    s1: { title: "On-time (9:00\u20139:30 PM)", color: "#1e40af" },
+    s2: { title: "Slightly Late (9:31\u201310:00 PM)", color: "#92400e" },
+    s3: { title: "Late Arrival (After 10:00 PM)", color: "#b91c1c" }
+  };
+  const attModalData = useMemo(() => {
+    if (!attModal) return null;
+    const meta = ATT_CARD_META[attModal];
+    if (!meta) return null;
+    let matches;
+    if (attModal === "present" || attModal === "attendance") {
+      matches = allMembers.filter(m => attendance[m.name]?.status === "P");
+    } else if (attModal === "absent") {
+      matches = allMembers.filter(m => attendance[m.name]?.status === "A");
+    } else if (attModal === "unmarked") {
+      matches = allMembers.filter(m => !attendance[m.name]?.status);
+    } else if (attModal === "total") {
+      matches = allMembers;
+    } else if (attModal === "s1" || attModal === "s2" || attModal === "s3") {
+      const names = new Set(timeSlots[attModal]);
+      matches = allMembers.filter(m => names.has(m.name));
+    } else {
+      matches = [];
+    }
+    const byFP = {};
+    matches.forEach(m => {
+      const fp = m.followup || "Unassigned";
+      (byFP[fp] = byFP[fp] || []).push(m);
+    });
+    const groups = Object.keys(byFP).sort().map(fp => ({
+      fp,
+      members: byFP[fp].sort((a, b) => a.name.localeCompare(b.name))
+    }));
+    return { ...meta, groups, total: matches.length };
+  }, [attModal, allMembers, attendance, timeSlots]);
+
+  function buildAttModalMsg() {
+    if (!attModalData) return "";
+    let msg = `*|| Akshar Anand ||*\n`;
+    msg += `*${attModalData.title} \u2014 ${sessionDate}*\n`;
+    msg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n`;
+    if (attModalData.groups.length === 0) {
+      msg += `No yuvaks in this list.`;
+      return msg;
+    }
+    attModalData.groups.forEach(g => {
+      msg += `*${g.fp}* (${g.members.length})\n`;
+      g.members.forEach(m => {
+        msg += `\u2022 ${m.name}${m.contact ? ` \u2014 ${m.contact}` : ""}\n`;
+      });
+      msg += `\n`;
+    });
+    msg += `Total: ${attModalData.total} yuvak${attModalData.total !== 1 ? "s" : ""}`;
+    return msg;
+  }
+  function doShareAttModal() {
+    const msg = buildAttModalMsg();
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  }
+
+  // ── Live Irregular-Absent report, grouped by followup leader, with
+  // contact numbers — mirrors buildRegularAbsentByFPMsg, using the SAME
+  // irregularAbsent list already powering the Attendance panel.
+  function buildIrregularAbsentByFPMsg() {
+    let msg = `*|| Akshar Anand ||*\n`;
+    msg += `*Irregular Yuvaks Absent \u2014 ${sessionDate}*\n`;
+    msg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n`;
+    if (irregularAbsent.length === 0) {
+      msg += `All Irregular yuvaks are present today!`;
+      return msg;
+    }
+    const byFP = {};
+    irregularAbsent.forEach(m => {
+      const fp = m.followup || "Unassigned";
+      (byFP[fp] = byFP[fp] || []).push(m);
+    });
+    Object.keys(byFP).sort().forEach(fp => {
+      msg += `*${fp}* (${byFP[fp].length})\n`;
+      byFP[fp].forEach(m => {
+        msg += `\u2022 ${m.name}${m.contact ? ` \u2014 ${m.contact}` : ""}\n`;
+      });
+      msg += `\n`;
+    });
+    msg += `Total: ${irregularAbsent.length} Irregular yuvak${irregularAbsent.length !== 1 ? "s" : ""} absent`;
+    return msg;
+  }
+  function doShareIrregularAbsentByFP() {
+    const msg = buildIrregularAbsentByFPMsg();
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  }
 
   // ── Historic Data ──────────────────────────────────────────────────────────
   const prevHistory = useMemo(() => history.filter(s => s.date !== sessionDate), [history, sessionDate]);
@@ -5569,9 +5668,12 @@ function App() {
       gap: 8,
       marginBottom: 14
     }
-  }, [["Present", totalP, "#15803d"], ["Absent", totalA, "#b91c1c"], ["Unmarked", allMembers.length - totalMarked, "#888"], ["Attendance", pct + "%", pct >= 70 ? "#15803d" : pct >= 40 ? "#92400e" : "#b91c1c"], ["Total", allMembers.length, "#1a1a1a"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
+  }, [["Present", totalP, "#15803d", "present"], ["Absent", totalA, "#b91c1c", "absent"], ["Unmarked", allMembers.length - totalMarked, "#888", "unmarked"], ["Attendance", pct + "%", pct >= 70 ? "#15803d" : pct >= 40 ? "#92400e" : "#b91c1c", "attendance"], ["Total", allMembers.length, "#1a1a1a", "total"]].map(([l, v, c, id]) => /*#__PURE__*/React.createElement("div", {
     key: l,
-    className: "stat-card"
+    className: "stat-card",
+    onClick: () => setAttModal(id),
+    title: "Click to view list",
+    style: { cursor: "pointer" }
   }, /*#__PURE__*/React.createElement("div", {
     className: "stat-label"
   }, l), /*#__PURE__*/React.createElement("div", {
@@ -5584,17 +5686,17 @@ function App() {
       /*#__PURE__*/React.createElement("span", null, "\u23F0"), " Arrival Time Slots (9PM\u201311PM session)"
     ),
     /*#__PURE__*/React.createElement("div", {className:"timeslot-grid"},
-      /*#__PURE__*/React.createElement("div", {className:"timeslot-card"},
+      /*#__PURE__*/React.createElement("div", {className:"timeslot-card",onClick:()=>setAttModal("s1"),title:"Click to view list",style:{cursor:"pointer"}},
         /*#__PURE__*/React.createElement("div", {className:"timeslot-label"}, "9:00 \u2013 9:30 PM"),
         /*#__PURE__*/React.createElement("div", {className:"timeslot-num"}, timeSlots.s1.length),
         /*#__PURE__*/React.createElement("div", {className:"timeslot-sub"}, "\u2705 On-time")
       ),
-      /*#__PURE__*/React.createElement("div", {className:"timeslot-card",style:{background:"#fffbeb",borderColor:"#fde68a"}},
+      /*#__PURE__*/React.createElement("div", {className:"timeslot-card",onClick:()=>setAttModal("s2"),title:"Click to view list",style:{background:"#fffbeb",borderColor:"#fde68a",cursor:"pointer"}},
         /*#__PURE__*/React.createElement("div", {className:"timeslot-label",style:{color:"#92400e"}}, "9:31 \u2013 10:00 PM"),
         /*#__PURE__*/React.createElement("div", {className:"timeslot-num",style:{color:"#92400e"}}, timeSlots.s2.length),
         /*#__PURE__*/React.createElement("div", {className:"timeslot-sub"}, "\uD83D\uDD51 Slightly late")
       ),
-      /*#__PURE__*/React.createElement("div", {className:"timeslot-card",style:{background:"#fff1f2",borderColor:"#fecdd3"}},
+      /*#__PURE__*/React.createElement("div", {className:"timeslot-card",onClick:()=>setAttModal("s3"),title:"Click to view list",style:{background:"#fff1f2",borderColor:"#fecdd3",cursor:"pointer"}},
         /*#__PURE__*/React.createElement("div", {className:"timeslot-label",style:{color:"#b91c1c"}}, "After 10:00 PM"),
         /*#__PURE__*/React.createElement("div", {className:"timeslot-num",style:{color:"#b91c1c"}}, timeSlots.s3.length),
         /*#__PURE__*/React.createElement("div", {className:"timeslot-sub"}, "\uD83D\uDD34 Late arrival")
@@ -5845,7 +5947,12 @@ function App() {
           className: "wa-menu-item",
           onClick: () => { setShowWAMenu(false); doShareRegularAbsentByFP(); }
         }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 13 } }, "\uD83D\uDD34 Regular Absent (live)"),
-           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--text-muted)" } }, `${regularAbsent.length} Regular yuvak${regularAbsent.length !== 1 ? "s" : ""} absent right now, by followup, with contacts`))
+           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--text-muted)" } }, `${regularAbsent.length} Regular yuvak${regularAbsent.length !== 1 ? "s" : ""} absent right now, by followup, with contacts`)),
+        /*#__PURE__*/React.createElement("button", {
+          className: "wa-menu-item",
+          onClick: () => { setShowWAMenu(false); doShareIrregularAbsentByFP(); }
+        }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 13 } }, "\uD83D\uDFE0 Irregular Absent (live)"),
+           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--text-muted)" } }, `${irregularAbsent.length} Irregular yuvak${irregularAbsent.length !== 1 ? "s" : ""} absent right now, by followup, with contacts`))
       )
     )
   ), /*#__PURE__*/React.createElement("button", {
@@ -8074,6 +8181,56 @@ function App() {
     style: { fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }
   }, m.contact))))))))
   );
+})() : null), (attModalData ? (() => {
+  const d = attModalData;
+  const titleBlock = /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 15 } }, d.title),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, opacity: .85, marginTop: 2 } }, d.total, " yuvak", d.total !== 1 ? "s" : "", " \u00B7 ", sessionDate, " \u00B7 live")
+  );
+  const closeBtn = /*#__PURE__*/React.createElement("button", {
+    onClick: () => setAttModal(null),
+    style: { background: "rgba(255,255,255,.2)", border: "none", borderRadius: 8, color: "#fff", fontSize: 16, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }
+  }, "\u2715");
+  const header = /*#__PURE__*/React.createElement("div", {
+    style: { background: d.color, borderRadius: "16px 16px 0 0", padding: "16px 20px", color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0 }
+  }, titleBlock, closeBtn);
+  const shareBtn = /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-wa",
+    onClick: doShareAttModal,
+    style: { width: "100%", justifyContent: "center", gap: 6 }
+  }, "Share this list by Followup (WhatsApp)");
+  const actionRow = /*#__PURE__*/React.createElement("div", { style: { padding: "12px 20px" } }, shareBtn);
+  let listBody;
+  if (d.groups.length === 0) {
+    listBody = /*#__PURE__*/React.createElement("div", {
+      style: { padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }
+    }, "No yuvaks in this list.");
+  } else {
+    const groupEls = d.groups.map(g => {
+      const fpHeader = /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", background: darkMode ? "rgba(148,163,184,.1)" : "#f8fafc", padding: "6px 20px", borderTop: darkMode ? "1px solid var(--glass-border)" : "1px solid #f1f5f9", borderBottom: darkMode ? "1px solid var(--glass-border)" : "1px solid #f1f5f9" }
+      }, g.fp, " (", g.members.length, ")");
+      const memberEls = g.members.map((m, i) => {
+        const numSpan = /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "var(--text-muted)", width: 18, flexShrink: 0 } }, i + 1, ".");
+        const nameSpan = /*#__PURE__*/React.createElement("span", { style: { fontSize: 14 } }, m.name);
+        const contactSpan = m.contact ? /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" } }, m.contact) : null;
+        return /*#__PURE__*/React.createElement("div", {
+          key: m.name, className: "row-hover",
+          style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 20px 8px 36px" }
+        }, numSpan, nameSpan, contactSpan);
+      });
+      return /*#__PURE__*/React.createElement("div", { key: g.fp, style: { marginBottom: 6 } }, fpHeader, memberEls);
+    });
+    listBody = /*#__PURE__*/React.createElement("div", { style: { padding: "4px 0 12px" } }, groupEls);
+  }
+  const modalCard = /*#__PURE__*/React.createElement("div", {
+    style: { background: darkMode ? "#1e293b" : "#fff", borderRadius: 16, maxWidth: 460, width: "92%", maxHeight: "82vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,.25)", padding: 0 },
+    onClick: e => e.stopPropagation()
+  }, header, actionRow, listBody);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "modal-bg",
+    onClick: () => setAttModal(null)
+  }, modalCard);
 })() : null), showGroupedWAModal && /*#__PURE__*/React.createElement("div", {
     className: "modal-bg",
     onClick: function(){ setShowGroupedWAModal(false); }
@@ -10828,4 +10985,3 @@ ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.c
 </script>
 </body>
 </html>
- 
