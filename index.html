@@ -2898,6 +2898,20 @@ function App() {
     });
   }, [allDates, histFrom, histTo]);
 
+  // ── Total Present per date (Historic tab column headers) ────────────────
+  // Computed straight from the session record for that date, independent of
+  // the name/followup search box, so the header always reflects the true
+  // session total even while a search filter is narrowing the rows shown.
+  const histDatePresentTotals = useMemo(() => {
+    const map = {};
+    filteredDates.forEach(d => {
+      const session = prevHistory.find(s => s.date === d);
+      map[d] = session ? session.records.filter(r => r.status === "P").length : 0;
+    });
+    return map;
+  }, [filteredDates, prevHistory]);
+
+
   // ── Edit a past attendance cell ───────────────────────────────────────────
   function doHistEdit(memberName, date, newStatus) { if (!requireAdmin()) return;
     const newHist = history.map(s => {
@@ -6792,7 +6806,17 @@ function App() {
       gap: 4,
       padding: "4px 2px"
     }
-  }, /*#__PURE__*/React.createElement("span", null, d), /*#__PURE__*/React.createElement("button", {
+  }, /*#__PURE__*/React.createElement("span", null, d), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: "#4ade80",
+      background: "rgba(74,222,128,.15)",
+      borderRadius: 10,
+      padding: "1px 8px"
+    },
+    title: `Total present on ${d}`
+  }, "\u2705 ", histDatePresentTotals[d] ?? 0), /*#__PURE__*/React.createElement("button", {
     onClick: () => setDeleteHistDate(d),
     title: `Delete all data for ${d}`,
     style: {
