@@ -10570,6 +10570,16 @@ function AuthGate() {
   const [gatePhone, setGatePhone] = useState("");
   const [gatePassword, setGatePassword] = useState("");
   const [gateError, setGateError] = useState("");
+  // The phone number that was actually verified against the password at
+  // gate-submit time. Kept separate from the (still-editable) gatePhone
+  // input, and mirrored to sessionStorage so it survives the redirect back
+  // from Google sign-in and any page reloads while the session is active.
+  // This is what gets checked against the registered Manage Access list
+  // once Firestore data has loaded — see the "phone not registered" block
+  // further down, after storeReady.
+  const [verifiedGatePhone, setVerifiedGatePhone] = useState(function () {
+    try { return sessionStorage.getItem("shreeji_gate_phone") || ""; } catch (e) { return ""; }
+  });
   function handleGateSubmit(e) {
     e.preventDefault();
     var phone = gatePhone.trim();
@@ -10581,10 +10591,30 @@ function AuthGate() {
       setGateError("");
       setGatePassword("");
       setGateUnlocked(true);
-      try { sessionStorage.setItem("shreeji_gate_unlocked", "1"); } catch (e2) {}
+      setVerifiedGatePhone(phone);
+      try {
+        sessionStorage.setItem("shreeji_gate_unlocked", "1");
+        sessionStorage.setItem("shreeji_gate_phone", phone);
+      } catch (e2) {}
     } else {
       setGateError("Incorrect password.");
     }
+  }
+  // A phone number is allowed through if it's registered in the Manage
+  // Access list (any entry's phone field — this mirrors what the
+  // "Settings → Manage Access" screen shows as having access), OR if the
+  // signed-in Google account is one of the two permanent super admins
+  // (they aren't listed in Manage Access by design, so they're exempt from
+  // the phone check itself — Firestore's write rules still gate them by
+  // email regardless).
+  function isGatePhoneRegistered(phone, signedInUser) {
+    if (!phone) return false;
+    if (window.ShreejiFirebase && window.ShreejiFirebase.isAdmin(signedInUser)) return true;
+    var list = (window.ShreejiStore.cache && window.ShreejiStore.cache.shreeji_access_list) || {};
+    return Object.keys(list).some(function (email) {
+      var entry = list[email];
+      return entry && String(entry.phone || "").trim() === phone;
+    });
   }
 
   // ── Offline detection ────────────────────────────────────────────────
@@ -10696,7 +10726,11 @@ function AuthGate() {
       // first attempt had even finished resolving.
       if (!u && prevUserRef.current) {
         setGateUnlocked(false);
-        try { sessionStorage.removeItem("shreeji_gate_unlocked"); } catch (e) {}
+        setVerifiedGatePhone("");
+        try {
+          sessionStorage.removeItem("shreeji_gate_unlocked");
+          sessionStorage.removeItem("shreeji_gate_phone");
+        } catch (e) {}
         autoSignInTriggeredRef.current = false;
       }
       prevUserRef.current = u;
@@ -10939,6 +10973,39 @@ function AuthGate() {
         firestoreError ?
           /*#__PURE__*/React.createElement("div", { style: { color: "#991b1b", fontSize: 13.5 } }, firestoreError) :
           "Connecting to shared data…"
+      )
+    );
+  }
+
+  // ── Signed in, doc loaded — but the phone entered at the gate isn't
+  //    registered in Manage Access. This is the real enforcement point:
+  //    the Manage Access list itself lives in Firestore, which can only be
+  //    read once signed in, so this is the earliest moment the phone can
+  //    actually be checked against it. The person still typed a phone
+  //    number+password on the very first screen, and from their point of
+  //    view this reads as "that login screen rejected my number" — they
+  //    never see the underlying Google account picker succeed.
+  if (!isGatePhoneRegistered(verifiedGatePhone, user)) {
+    return /*#__PURE__*/React.createElement("div", { style: screenStyle },
+      /*#__PURE__*/React.createElement("div", { style: cardStyle },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 40, marginBottom: 10 } }, "🚫"),
+        /*#__PURE__*/React.createElement("h2", { style: { margin: "0 0 6px", color: "#0f172a" } }, "Access restricted"),
+        /*#__PURE__*/React.createElement("p", { style: { color: "#64748b", fontSize: 13.5, marginBottom: 18 } },
+          "Number does not have access to the site."),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: function () {
+            setGateUnlocked(false);
+            setVerifiedGatePhone("");
+            setGatePhone("");
+            setGatePassword("");
+            try {
+              sessionStorage.removeItem("shreeji_gate_unlocked");
+              sessionStorage.removeItem("shreeji_gate_phone");
+            } catch (e) {}
+            window.ShreejiFirebase.signOutUser();
+          },
+          style: { padding: "10px 18px", borderRadius: 10, border: "1.5px solid #e2e8f0", background: "#fff", cursor: "pointer", fontWeight: 600 }
+        }, "Go back")
       )
     );
   }
