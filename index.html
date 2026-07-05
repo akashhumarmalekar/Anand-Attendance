@@ -1867,6 +1867,8 @@ function App() {
   const [showGroupedWAModal, setShowGroupedWAModal] = useState(false);
   // Dashboard stat-card drilldown modal (Regular/Irregular/No Category/Last/Best/Lowest Session)
   const [dashModal, setDashModal] = useState(null);
+  // Report tab stat-card drilldown modal (Regular/Irregular/No Present/Absent + Grand totals)
+  const [reportModal, setReportModal] = useState(null);
   // Merged WhatsApp menu — replaces 3 separate buttons (WhatsApp / FP-Wise
   // WA / Grouped WA) with one button that opens a small dropdown. None of
   // the underlying send logic changed — this only changes how the existing
@@ -2464,6 +2466,67 @@ function App() {
       grandA: totRA + totIA + totNA
     };
   }, [history, attendance, allMembers]);
+
+  // ── Report tab card drilldown ────────────────────────────────────────────
+  // Builds the followup-grouped member list shown when a Report summary card
+  // (Regular/Irregular/No Present, Regular/Irregular/No Absent, Grand
+  // Present/Absent) is clicked. Filtering exactly mirrors reportData's own
+  // counting logic (status === "P" or status === "A" specifically — an
+  // unmarked member counts toward neither) so the list always matches the
+  // number shown on the card.
+  const REPORT_CARD_META = {
+    RP: { title: "Regular Present", cat: "R", status: "P", color: "#15803d" },
+    IP: { title: "Irregular Present", cat: "I", status: "P", color: "#92400e" },
+    NP: { title: "No (Present)", cat: "N", status: "P", color: "#b91c1c" },
+    GP: { title: "Grand Present", cat: "ALL", status: "P", color: "#1e40af" },
+    RA: { title: "Regular Absent", cat: "R", status: "A", color: "#15803d" },
+    IA: { title: "Irregular Absent", cat: "I", status: "A", color: "#92400e" },
+    NA: { title: "No (Absent)", cat: "N", status: "A", color: "#b91c1c" },
+    GA: { title: "Grand Absent", cat: "ALL", status: "A", color: "#64748b" }
+  };
+  const reportModalData = useMemo(() => {
+    if (!reportModal) return null;
+    const meta = REPORT_CARD_META[reportModal];
+    if (!meta) return null;
+    const matches = allMembers.filter(m => {
+      const cat = getCategory(m.name, history);
+      if (meta.cat !== "ALL" && cat !== meta.cat) return false;
+      const s = attendance[m.name]?.status;
+      return s === meta.status;
+    });
+    const byFP = {};
+    matches.forEach(m => {
+      const fp = m.followup || "Unassigned";
+      (byFP[fp] = byFP[fp] || []).push(m);
+    });
+    const groups = Object.keys(byFP).sort().map(fp => ({
+      fp,
+      members: byFP[fp].sort((a, b) => a.name.localeCompare(b.name))
+    }));
+    return { ...meta, groups, total: matches.length };
+  }, [reportModal, allMembers, history, attendance]);
+
+  function buildReportModalMsg() {
+    if (!reportModalData) return "";
+    const emoji = reportModalData.status === "P" ? "\u2705" : "\u274C";
+    let msg = `\uD83D\uDE4F *|| Akshar Anand ||*\n`;
+    msg += `${emoji} *${reportModalData.title} \u2014 ${sessionDate}*\n`;
+    msg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n`;
+    reportModalData.groups.forEach(g => {
+      msg += `\uD83D\uDC64 *${g.fp}* (${g.members.length})\n`;
+      g.members.forEach(m => {
+        msg += `\u2022 ${m.name}${m.contact ? ` \u2014 ${m.contact}` : ""}\n`;
+      });
+      msg += `\n`;
+    });
+    msg += `Total: ${reportModalData.total} yuvak${reportModalData.total !== 1 ? "s" : ""}`;
+    return msg;
+  }
+  function doShareReportModal() {
+    const msg = buildReportModalMsg();
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  }
+
 
   // ── Time Slot Counts (9-9:30, 9:31-10, after 10) ─────────────────────────
   const timeSlots = useMemo(() => {
@@ -6356,9 +6419,12 @@ function App() {
       gap: 10,
       marginBottom: 18
     }
-  }, [["Regular Present", reportData.totRP, "#15803d"], ["Irregular Present", reportData.totIP, "#92400e"], ["No (Present)", reportData.totNP, "#b91c1c"], ["Grand Present", reportData.grandP, "#1e40af"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
+  }, [["Regular Present", reportData.totRP, "#15803d", "RP"], ["Irregular Present", reportData.totIP, "#92400e", "IP"], ["No (Present)", reportData.totNP, "#b91c1c", "NP"], ["Grand Present", reportData.grandP, "#1e40af", "GP"]].map(([l, v, c, id]) => /*#__PURE__*/React.createElement("div", {
     key: l,
-    className: "stat-card"
+    className: "stat-card",
+    onClick: () => setReportModal(id),
+    title: "Click to view list",
+    style: { cursor: "pointer" }
   }, /*#__PURE__*/React.createElement("div", {
     className: "stat-label"
   }, l), /*#__PURE__*/React.createElement("div", {
@@ -6380,9 +6446,12 @@ function App() {
       gap: 10,
       marginBottom: 22
     }
-  }, [["Regular Absent", reportData.totRA, "#15803d"], ["Irregular Absent", reportData.totIA, "#92400e"], ["No (Absent)", reportData.totNA, "#b91c1c"], ["Grand Absent", reportData.grandA, "#64748b"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
+  }, [["Regular Absent", reportData.totRA, "#15803d", "RA"], ["Irregular Absent", reportData.totIA, "#92400e", "IA"], ["No (Absent)", reportData.totNA, "#b91c1c", "NA"], ["Grand Absent", reportData.grandA, "#64748b", "GA"]].map(([l, v, c, id]) => /*#__PURE__*/React.createElement("div", {
     key: l,
-    className: "stat-card"
+    className: "stat-card",
+    onClick: () => setReportModal(id),
+    title: "Click to view list",
+    style: { cursor: "pointer" }
   }, /*#__PURE__*/React.createElement("div", {
     className: "stat-label"
   }, l), /*#__PURE__*/React.createElement("div", {
@@ -7921,7 +7990,91 @@ function App() {
     style: { fontSize: 11, color: "var(--text-muted)", width: 22, flexShrink: 0 }
   }, i + 1, "."), /*#__PURE__*/React.createElement("span", {
     style: { fontSize: 14 }
-  }, name)))))), showGroupedWAModal && /*#__PURE__*/React.createElement("div", {
+  }, name)))))), (reportModalData ? (() => {
+  const d = reportModalData;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "modal-bg",
+    onClick: () => setReportModal(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: darkMode ? "#1e293b" : "#fff",
+      borderRadius: 16,
+      maxWidth: 460,
+      width: "92%",
+      maxHeight: "82vh",
+      overflowY: "auto",
+      boxShadow: "0 20px 60px rgba(0,0,0,.25)",
+      padding: 0
+    },
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: d.color,
+      borderRadius: "16px 16px 0 0",
+      padding: "16px 20px",
+      color: "#fff",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      position: "sticky",
+      top: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 15 } }, d.title),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, opacity: .85, marginTop: 2 } }, d.total, " yuvak", d.total !== 1 ? "s" : "", " \u00B7 ", sessionDate)
+  ), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setReportModal(null),
+    style: {
+      background: "rgba(255,255,255,.2)",
+      border: "none",
+      borderRadius: 8,
+      color: "#fff",
+      fontSize: 16,
+      cursor: "pointer",
+      padding: "4px 10px",
+      lineHeight: 1
+    }
+  }, "\u2715")), /*#__PURE__*/React.createElement("div", {
+    style: { padding: "12px 20px" }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-wa",
+    onClick: doShareReportModal,
+    style: { width: "100%", justifyContent: "center", gap: 6 }
+  }, "\uD83D\uDCF2 Share this list by Followup (WhatsApp)")), (d.groups.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: { padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }
+  }, "No yuvaks in this list.") : /*#__PURE__*/React.createElement("div", {
+    style: { padding: "4px 0 12px" }
+  }, d.groups.map(g => /*#__PURE__*/React.createElement("div", {
+    key: g.fp,
+    style: { marginBottom: 6 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "var(--text-secondary)",
+      background: darkMode ? "rgba(148,163,184,.1)" : "#f8fafc",
+      padding: "6px 20px",
+      borderTop: darkMode ? "1px solid var(--glass-border)" : "1px solid #f1f5f9",
+      borderBottom: darkMode ? "1px solid var(--glass-border)" : "1px solid #f1f5f9"
+    }
+  }, "\uD83D\uDC64 ", g.fp, " (", g.members.length, ")"), g.members.map((m, i) => /*#__PURE__*/React.createElement("div", {
+    key: m.name,
+    className: "row-hover",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 20px 8px 36px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 11, color: "var(--text-muted)", width: 18, flexShrink: 0 }
+  }, i + 1, "."), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 14 }
+  }, m.name), m.contact && /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }
+  }, m.contact))))))))
+  );
+})() : null), showGroupedWAModal && /*#__PURE__*/React.createElement("div", {
     className: "modal-bg",
     onClick: function(){ setShowGroupedWAModal(false); }
   }, /*#__PURE__*/React.createElement("div", {
