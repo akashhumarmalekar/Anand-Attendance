@@ -1041,6 +1041,30 @@ tr:hover td{background:#eff6ff !important;}
 .timeslot-sub{font-size:10px;color:#64748b;margin-top:2px;}
 @media(max-width:480px){.timeslot-grid{grid-template-columns:1fr 1fr;}.timeslot-num{font-size:22px;}}
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE DASHBOARD FIXES
+   The Category Distribution + Attendance % per Session charts sit side by
+   side on desktop (1fr 1fr). On a phone that squeezes each SVG chart into
+   ~160px, making the bars/labels illegible. Stack them full-width instead.
+   The inline style sets gridTemplateColumns directly, so !important is
+   needed to win over it here.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media(max-width:700px){
+  .dash-2col{grid-template-columns:1fr !important;}
+}
+
+/* Tab strip on small phones: the icon+label pills were tight against each
+   other with 15 tabs all needing horizontal scroll, reading as a cluttered
+   wall of text. Below 480px, collapse to icon-only pills (with the active
+   tab's label still shown) so more tabs are visible at once and each pill
+   reads as a clear, separated tap target. */
+@media(max-width:480px){
+  .tab-pill{padding:0 10px;gap:4px;}
+  .tab-pill-label{display:none;}
+  .tab-pill.active .tab-pill-label{display:inline;}
+  .tab-pill-icon{font-size:16px;}
+}
+
 /* Inner sub-tab buttons (used inside panels like Attendance sub-tabs) */
 .tab-btn{padding:9px 16px;border:none;border-bottom:2px solid transparent;background:transparent;cursor:pointer;font-size:13.5px;font-weight:500;color:var(--text-muted);transition:var(--t);min-height:40px;}
 .tab-btn.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600;}
@@ -4825,7 +4849,7 @@ function App() {
       x: PL - 4,
       y: PT + yScale(v) + 4,
       textAnchor: "end",
-      fontSize: "9",
+      fontSize: "11",
       fill: "#bbb"
     }, v))), /*#__PURE__*/React.createElement("polygon", {
       points: area("totalPresent"),
@@ -4899,14 +4923,14 @@ function App() {
         x: x,
         y: H - 4,
         textAnchor: "middle",
-        fontSize: "9",
+        fontSize: "12",
         fill: "#999",
         transform: `rotate(-35,${x},${H - 4})`
       }, label), /*#__PURE__*/React.createElement("text", {
         x: x,
         y: yP - 8,
         textAnchor: "middle",
-        fontSize: "9",
+        fontSize: "11",
         fill: "#1e40af",
         fontWeight: "600"
       }, d.totalPresent));
@@ -4923,10 +4947,11 @@ function App() {
     }), /*#__PURE__*/React.createElement("text", {
       x: "17",
       y: "0",
-      fontSize: "9",
+      fontSize: "11",
       fill: "#666"
     }, l)))));
   })()), /*#__PURE__*/React.createElement("div", {
+    className: "dash-2col",
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1fr",
@@ -5083,7 +5108,7 @@ function App() {
       x: "26",
       y: 143 - p * 1.1,
       textAnchor: "end",
-      fontSize: "8",
+      fontSize: "9.5",
       fill: "#ccc"
     }, p, "%"))), data.map((d, i) => {
       const bh = d.pct * 1.1;
@@ -5104,20 +5129,20 @@ function App() {
         x: x + barW / 2,
         y: 135 - bh,
         textAnchor: "middle",
-        fontSize: "8",
+        fontSize: "9.5",
         fill: fill,
         fontWeight: "600"
       }, d.pct, "%"), /*#__PURE__*/React.createElement("text", {
         x: x + barW / 2,
         y: 150,
         textAnchor: "middle",
-        fontSize: "7.5",
+        fontSize: "9",
         fill: "#aaa"
       }, d.date.split(" ")[0]), /*#__PURE__*/React.createElement("text", {
         x: x + barW / 2,
         y: 158,
         textAnchor: "middle",
-        fontSize: "7.5",
+        fontSize: "9",
         fill: "#aaa"
       }, d.date.split(" ")[1]));
     }));
@@ -5254,7 +5279,7 @@ function App() {
       x: PL - 4,
       y: PT + iH * (1 - p / 100) + 4,
       textAnchor: "end",
-      fontSize: "9",
+      fontSize: "11",
       fill: "#ccc"
     }, p))), data.map((d, i) => {
       const tot = d.totalMembers || 1;
@@ -5291,7 +5316,7 @@ function App() {
         x: x + bW / 2,
         y: H - PT - 4,
         textAnchor: "middle",
-        fontSize: "8.5",
+        fontSize: "12",
         fill: "#999",
         transform: `rotate(-35,${x + bW / 2},${H - PT - 4})`
       }, label));
@@ -5308,7 +5333,7 @@ function App() {
     }), /*#__PURE__*/React.createElement("text", {
       x: "13",
       y: "0",
-      fontSize: "9",
+      fontSize: "11",
       fill: "#666"
     }, l)))));
   })()), /*#__PURE__*/React.createElement("div", {
