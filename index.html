@@ -2230,8 +2230,8 @@ function App() {
   function buildAbsentMsg() {
     const absent = allMembers.filter(m => { var s=attendance[m.name]; return s && s.status==="A"; });
     const unmarked = allMembers.filter(m => { var s=attendance[m.name]; return !s || !s.status; });
-    let msg = "🙏 *|| Akshar Anand ||*\n" +
-      "🔴 *Absentee Alert – " + sessionDate + "*\n" +
+    let msg = "*|| Akshar Anand ||*\n" +
+      "*Absentee Alert – " + sessionDate + "*\n" +
       "━━━━━━━━━━━━━━━\n";
     if (absent.length) {
       msg += "❌ *Absent (" + absent.length + ")*\n";
@@ -2241,7 +2241,7 @@ function App() {
       msg += "\n⬜ *Not marked (" + unmarked.length + ")*\n";
       unmarked.forEach(function(m,i){ msg += (i+1) + ". " + m.name + "\n"; });
     }
-    msg += "━━━━━━━━━━━━━━━\n📊 *" + totalP + "P / " + totalA + "A — " + pct + "%*";
+    msg += "━━━━━━━━━━━━━━━\n*" + totalP + "P / " + totalA + "A — " + pct + "%*";
     return msg;
   }
   function doAbsentWA() { window.open("https://wa.me/?text=" + encodeURIComponent(buildAbsentMsg()), "_blank"); }
@@ -2261,7 +2261,7 @@ function App() {
       var _attendance$m$name6;
       return !((_attendance$m$name6 = attendance[m.name]) !== null && _attendance$m$name6 !== void 0 && _attendance$m$name6.status);
     });
-    let msg = `🙏 *|| Akshar Anand ||*\n📋 *Attendance – ${sessionDate}*\n━━━━━━━━━━━━━━━\n`;
+    let msg = `*|| Akshar Anand ||*\n*Attendance – ${sessionDate}*\n━━━━━━━━━━━━━━━\n`;
     msg += `✅ *Present (${present.length})*\n`;
     present.forEach((m, i) => {
       msg += `${i + 1}. ${m.name}\n`;
@@ -2276,7 +2276,7 @@ function App() {
         msg += `${i + 1}. ${m.name}\n`;
       });
     }
-    msg += `━━━━━━━━━━━━━━━\n📊 *${totalP}P / ${totalA}A — ${pct}%*`;
+    msg += `━━━━━━━━━━━━━━━\n*${totalP}P / ${totalA}A — ${pct}%*`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
   }
 
@@ -2509,11 +2509,11 @@ function App() {
   function buildReportModalMsg() {
     if (!reportModalData) return "";
     const emoji = reportModalData.status === "P" ? "\u2705" : "\u274C";
-    let msg = `\uD83D\uDE4F *|| Akshar Anand ||*\n`;
+    let msg = `*|| Akshar Anand ||*\n`;
     msg += `${emoji} *${reportModalData.title} \u2014 ${sessionDate}*\n`;
     msg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n`;
     reportModalData.groups.forEach(g => {
-      msg += `\uD83D\uDC64 *${g.fp}* (${g.members.length})\n`;
+      msg += `*${g.fp}* (${g.members.length})\n`;
       g.members.forEach(m => {
         msg += `\u2022 ${m.name}${m.contact ? ` \u2014 ${m.contact}` : ""}\n`;
       });
@@ -3093,15 +3093,15 @@ function App() {
       aByCat[c] = aByCat[c] || [];
       aByCat[c].push(m);
     });
-    let msg = `🙏 *|| Akshar Anand ||*\n`;
-    msg += `📋 *${fp} — ${sessionDate}*\n`;
+    let msg = `*|| Akshar Anand ||*\n`;
+    msg += `*${fp} — ${sessionDate}*\n`;
     msg += `━━━━━━━━━━━━━━━━━\n`;
 
     // Present section
     msg += `✅ *PRESENT — ${present.length}*\n`;
     ["R", "I", "N"].forEach(cat => {
       if (pByCat[cat].length) {
-        msg += `\n📌 *${catLabel[cat]} (${pByCat[cat].length})*\n`;
+        msg += `\n*${catLabel[cat]} (${pByCat[cat].length})*\n`;
         pByCat[cat].forEach((m, i) => {
           msg += `${i + 1}. ${m.name}\n`;
         });
@@ -3113,16 +3113,16 @@ function App() {
     msg += `❌ *ABSENT — ${absent.length}*\n`;
     ["R", "I", "N"].forEach(cat => {
       if (aByCat[cat].length) {
-        msg += `\n📌 *${catLabel[cat]} (${aByCat[cat].length})*\n`;
+        msg += `\n*${catLabel[cat]} (${aByCat[cat].length})*\n`;
         aByCat[cat].forEach((m, i) => {
           msg += `${i + 1}. ${m.name}\n`;
         });
       }
     });
     msg += `━━━━━━━━━━━━━━━━━\n`;
-    msg += `📊 *Total: ${present.length}P / ${absent.length}A / ${members.length} members*\n`;
+    msg += `*Total: ${present.length}P / ${absent.length}A / ${members.length} members*\n`;
     const pct2 = members.length > 0 ? Math.round(present.length / members.length * 100) : 0;
-    msg += `📈 *Attendance: ${pct2}%*`;
+    msg += `*Attendance: ${pct2}%*`;
     return msg;
   }
   // ── Live Regular-Absent report, grouped by followup leader, with
@@ -3130,8 +3130,8 @@ function App() {
   // powering the Attendance panel's "Regular Absent" subtab, so this is
   // always in sync with what's on screen, not a separate recomputation.
   function buildRegularAbsentByFPMsg() {
-    let msg = `🙏 *|| Akshar Anand ||*\n`;
-    msg += `🔴 *Regular Yuvaks Absent — ${sessionDate}*\n`;
+    let msg = `*|| Akshar Anand ||*\n`;
+    msg += `*Regular Yuvaks Absent — ${sessionDate}*\n`;
     msg += `━━━━━━━━━━━━━━━━━\n\n`;
     if (regularAbsent.length === 0) {
       msg += `✅ All Regular yuvaks are present today!`;
@@ -3143,7 +3143,7 @@ function App() {
       (byFP[fp] = byFP[fp] || []).push(m);
     });
     Object.keys(byFP).sort().forEach(fp => {
-      msg += `👤 *${fp}* (${byFP[fp].length})\n`;
+      msg += `*${fp}* (${byFP[fp].length})\n`;
       byFP[fp].forEach(m => {
         msg += `• ${m.name}${m.contact ? ` — ${m.contact}` : ""}\n`;
       });
@@ -3172,8 +3172,8 @@ function App() {
 
   // ── Consolidated all-FP WhatsApp message ────────────────────────────────
   function buildConsolidatedMsg() {
-    let msg = `🙏 *|| Akshar Anand ||*\n`;
-    msg += `📋 *Consolidated Report — ${sessionDate}*\n`;
+    let msg = `*|| Akshar Anand ||*\n`;
+    msg += `*Consolidated Report — ${sessionDate}*\n`;
     msg += `━━━━━━━━━━━━━━━━━\n\n`;
     allFollowups.forEach((fp, fi) => {
       const members = allMembers.filter(m => m.followup === fp);
@@ -3220,7 +3220,7 @@ function App() {
       if (fi < allFollowups.length - 1) msg += "\n";
     });
     msg += `━━━━━━━━━━━━━━━━━\n`;
-    msg += `📊 *Grand Total: ${totalP}P / ${totalA}A / ${allMembers.length} members — ${pct}%*`;
+    msg += `*Grand Total: ${totalP}P / ${totalA}A / ${allMembers.length} members — ${pct}%*`;
     return msg;
   }
   function doWAConsolidated() {
@@ -3230,7 +3230,7 @@ function App() {
 
   // ── Individual absent WhatsApp message ───────────────────────────────────
   function doWAAbsent(m) {
-    const msg = `🙏 Jai Swaminarayan ${m.name.split(" ")[0]} bhai,\n\nAaj *|| Akshar Anand ||* sabha mein aapki kami mehsoos ki gayi. Aasha hai sab theek hai.\n\nAgle sabha mein zaroor padharna. 🙏\n\n– ${sessionDate}`;
+    const msg = `Jai Swaminarayan ${m.name.split(" ")[0]} bhai,\n\nAaj *|| Akshar Anand ||* sabha mein aapki kami mehsoos ki gayi. Aasha hai sab theek hai.\n\nAgle sabha mein zaroor padharna.\n\n– ${sessionDate}`;
     window.open(`https://wa.me/91${m.contact}?text=${encodeURIComponent(msg)}`, "_blank");
   }
 
