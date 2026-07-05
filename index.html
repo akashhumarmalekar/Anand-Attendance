@@ -1980,28 +1980,41 @@ function App() {
   function upsertAccessEntry(email, phone, role, name) {
     if (!requireSuperAdmin()) return;
     email = email.trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast_("Enter a valid email address", "error");
+    const isAdminRole = role === "admin";
+    const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (email && !emailLooksValid) {
+      toast_("Enter a valid email address, or leave it blank for a viewer with no fixed Google account", "error");
+      return;
+    }
+    // Admins DO need a Google email on file — that's the account Firestore's
+    // write rules (and the app's own isAdmin/role checks) key off of.
+    // Viewers don't: they're view-only regardless of which Google account
+    // they use, so all we really need to gate them is the phone number.
+    if (isAdminRole && !emailLooksValid) {
+      toast_("Admin access needs a valid Google email", "error");
       return;
     }
     if (!/^\d{10}$/.test(phone.trim())) {
       toast_("Enter a valid 10-digit phone number", "error");
       return;
     }
+    // No email given (viewer only) → key the entry by phone number instead,
+    // since the object key has to be something unique and email won't exist.
+    const key = email || phone.trim();
     const next = Object.assign({}, accessList, {
-      [email]: { phone: phone.trim(), role: role === "admin" ? "admin" : "viewer", name: name.trim() }
+      [key]: { phone: phone.trim(), role: isAdminRole ? "admin" : "viewer", name: name.trim(), email: email || "" }
     });
     setAccessList(next);
     fsSet(LS_ACCESS_LIST, next);
-    toast_(`${email} set as ${role === "admin" ? "Admin" : "Viewer"}.`);
+    toast_(`${name.trim() || phone.trim()} set as ${isAdminRole ? "Admin" : "Viewer"}.`);
   }
-  function removeAccessEntry(email) {
+  function removeAccessEntry(key) {
     if (!requireSuperAdmin()) return;
     const next = Object.assign({}, accessList);
-    delete next[email];
+    delete next[key];
     setAccessList(next);
     fsSet(LS_ACCESS_LIST, next);
-    toast_(`Access entry for ${email} removed.`);
+    toast_(`Access entry for ${key} removed.`);
   }
 
   // Updates one field of the category criteria, validates it, persists to
@@ -10037,7 +10050,7 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement("div", { className: "card", style: { padding: 24, marginBottom: 14 } },
       /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 14, marginBottom: 6 } }, "👥 Manage Access"),
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "#666", marginBottom: 16 } },
-        "Add a phone number + the Google email that person signs in with, then choose Admin (can mark/edit everything) or Viewer (read-only). ",
+        "Add a phone number, then choose Admin (can mark/edit everything) or Viewer (read-only). Admins need the Google email they'll sign in with; for Viewers the Google email is optional — leave it blank if you don't know or don't care which account they'll use. ",
         /*#__PURE__*/React.createElement("strong", null, "akashhumarmalekar@gmail.com and itssuru0369@gmail.com are permanent super admins")," and aren't listed here — they can't be changed from this screen."
       ),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 } },
@@ -10050,7 +10063,7 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
           onChange: e => setAccessFormPhone(e.target.value.replace(/\D/g, "").slice(0, 10)), style: { flex: "1 1 130px" }
         }),
         /*#__PURE__*/React.createElement("input", {
-          className: "input-s", placeholder: "Google email", value: accessFormEmail,
+          className: "input-s", placeholder: "Google email (optional for Viewer)", value: accessFormEmail,
           onChange: e => setAccessFormEmail(e.target.value), style: { flex: "1 1 200px" }
         }),
         /*#__PURE__*/React.createElement("select", {
@@ -10076,18 +10089,19 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
               /*#__PURE__*/React.createElement("span", { style: { width: 80, textAlign: "center" } }, "Role"),
               /*#__PURE__*/React.createElement("span", { style: { width: 40 } })
             ),
-            Object.keys(accessList).sort().map(email => {
-              const e = accessList[email];
-              return /*#__PURE__*/React.createElement("div", { key: email, style: { display: "flex", alignItems: "center", padding: "10px 16px", borderTop: "1px solid #f0f0f0" } },
+            Object.keys(accessList).sort().map(key => {
+              const e = accessList[key];
+              const hasEmail = !!(e.email || (key.indexOf("@") > -1));
+              return /*#__PURE__*/React.createElement("div", { key: key, style: { display: "flex", alignItems: "center", padding: "10px 16px", borderTop: "1px solid #f0f0f0" } },
                 /*#__PURE__*/React.createElement("span", { style: { flex: 1, fontSize: 13 } }, e.name || "—", /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#999" } }, e.phone)),
-                /*#__PURE__*/React.createElement("span", { style: { flex: 2, fontSize: 13, color: "#555" } }, email),
+                /*#__PURE__*/React.createElement("span", { style: { flex: 2, fontSize: 13, color: hasEmail ? "#555" : "#aaa", fontStyle: hasEmail ? "normal" : "italic" } }, hasEmail ? (e.email || key) : "No fixed Google account"),
                 /*#__PURE__*/React.createElement("span", { style: { width: 80, textAlign: "center" } },
                   /*#__PURE__*/React.createElement("span", { className: `badge badge-${e.role === "admin" ? "R" : "N"}` }, e.role === "admin" ? "Admin" : "Viewer")
                 ),
                 /*#__PURE__*/React.createElement("span", { style: { width: 40, textAlign: "right" } },
                   /*#__PURE__*/React.createElement("button", {
                     className: "row-action-icon-btn", style: { border: "1px solid #fee2e2", background: "#fef2f2", color: "#dc2626" },
-                    onClick: () => removeAccessEntry(email)
+                    onClick: () => removeAccessEntry(key)
                   }, "🗑")
                 )
               );
@@ -10645,8 +10659,18 @@ function AuthGate() {
       return SUPER_ADMIN_PHONES[email] === phone;
     }
     var list = (window.ShreejiStore.cache && window.ShreejiStore.cache.shreeji_access_list) || {};
-    var entry = list[email];
-    return !!entry && String(entry.phone || "").trim() === phone;
+    // Entry added WITH a Google email (admins always have one; viewers may
+    // too) — phone must match the entry tied to this specific account.
+    var byEmail = list[email];
+    if (byEmail && String(byEmail.phone || "").trim() === phone) return true;
+    // Viewer entries added WITHOUT a Google email are keyed by phone number
+    // instead (see upsertAccessEntry) — they're not tied to any particular
+    // account, so anyone signing in with ANY Google account is fine as long
+    // as they know that registered phone number.
+    return Object.keys(list).some(function (key) {
+      var entry = list[key];
+      return entry && entry.role !== "admin" && key.indexOf("@") === -1 && String(entry.phone || "").trim() === phone;
+    });
   }
 
   // ── Offline detection ────────────────────────────────────────────────
