@@ -501,8 +501,9 @@ button:active{transform:scale(.97);}
   --navbar-h:52px;
   --navbar-h-mobile:96px;
   --tabstrip-h:46px;
+  --tabstrip-gap:8px;
   --sticky-search-h:64px;
-  --header-total:calc(var(--navbar-h) + var(--tabstrip-h)); /* was hardcoded 98px — that silently drifted out of sync whenever navbar-h or tabstrip-h changed (e.g. the mobile navbar's taller two-row layout) */
+  --header-total:calc(var(--navbar-h) + var(--tabstrip-gap) + var(--tabstrip-h)); /* was hardcoded 98px — that silently drifted out of sync whenever navbar-h or tabstrip-h changed (e.g. the mobile navbar's taller two-row layout) */
   /* Slightly larger radius scale — rounder corners read as more modern/
      premium than the previous tighter scale. */
   --radius-sm:8px;
@@ -690,16 +691,19 @@ button:active{transform:scale(.97);}
    ═══════════════════════════════════════════════════════════════════════════ */
 .tab-strip{
   position:fixed;
-  top:var(--navbar-h);
+  top:calc(var(--navbar-h) + var(--tabstrip-gap));
   left:0;right:0;
   height:var(--tabstrip-h);
   background:var(--glass-bg-strong);
   backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  border-top:1px solid var(--glass-border);
   border-bottom:1px solid var(--glass-border);
   box-shadow:0 2px 12px rgba(79,70,229,.06);
   z-index:490;
   display:flex;
   align-items:stretch;
+  gap:6px;
+  padding:0 8px;
   overflow-x:auto;
   overflow-y:hidden;
   scroll-behavior:smooth;
@@ -719,6 +723,7 @@ button:active{transform:scale(.97);}
   gap:5px;
   padding:0 14px;
   height:100%;
+  border-radius:var(--radius-md);
   border:none;
   background:transparent;
   cursor:pointer;
@@ -734,7 +739,7 @@ button:active{transform:scale(.97);}
 }
 .tab-pill::after{
   content:"";
-  position:absolute;left:10px;right:10px;bottom:0;
+  position:absolute;left:16%;right:16%;bottom:0;
   height:3px;border-radius:3px 3px 0 0;
   background:var(--primary);
   transform:scaleX(0);transition:transform .18s ease;
@@ -762,8 +767,8 @@ button:active{transform:scale(.97);}
   line-height:1;
 }
 /* tiny left padding on very first pill so it doesn't butt against the edge */
-.tab-pill:first-child{margin-left:4px;}
-.tab-pill:last-child{margin-right:4px;}
+.tab-pill:first-child{margin-left:0;}
+.tab-pill:last-child{margin-right:0;}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN CONTENT
@@ -5684,7 +5689,7 @@ function App() {
       flexWrap: "wrap",
       marginBottom: 8,
       position: "sticky",
-      top: "calc(var(--navbar-h) + var(--tabstrip-h))",
+      top: "calc(var(--navbar-h) + var(--tabstrip-gap) + var(--tabstrip-h))",
       zIndex: 60,
       background: darkMode ? "#0f172a" : "#f5f4f0",
       padding: "10px 0 8px",
