@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -1895,7 +1895,7 @@ function App() {
   const swipeRef = useRef(null);
   const swipeStartX = useRef(null);
   const [timeEditName, setTimeEditName] = useState(null); // which member's time is being edited
-  const TAB_ORDER = ["dashboard", "panel", "report", "history", "monthly", "action", "restructure", "followupscore", "yoy", "register", "edit", "profiles", "excel", "settings"];
+  const TAB_ORDER = ["dashboard", "panel", "report", "history", "monthly", "action", "restructure", "register", "edit", "profiles", "excel", "settings"];
 
   // ── Followup Restructuring state
   const [fpExpanded, setFPExpanded] = useState({});
@@ -2546,6 +2546,28 @@ function App() {
   // counting logic (status === "P" or status === "A" specifically — an
   // unmarked member counts toward neither) so the list always matches the
   // number shown on the card.
+  // prevHistory and regBecomingIrr are pulled up here (ahead of their
+  // other original spot) because reportModalData's ARR case below needs
+  // regBecomingIrr, and JS temporal-dead-zone rules mean a const has to
+  // be declared earlier in the function body than any code that reads
+  // it during the same render.
+  const prevHistory = useMemo(() => history.filter(s => s.date !== sessionDate), [history, sessionDate]);
+// ── Smart Follow-up Action List ──────────────────────────────────────────
+  const regBecomingIrr = useMemo(function() {
+    if (prevHistory.length < 3) return [];
+    return allMembers.filter(function(m) {
+      var cat = getCategory(m.name, prevHistory);
+      if (cat !== "R") return false;
+      var last4 = prevHistory.slice(-4).map(function(s){ var r=s.records.find(function(x){return x.name===m.name;}); return r&&r.status==="P"; });
+      var attended4 = last4.filter(Boolean).length;
+      var recentAbsent = last4.length>=2 && !last4[last4.length-1] && !last4[last4.length-2];
+      return attended4 === 1 && recentAbsent;
+    }).map(function(m) {
+      return { name:m.name, followup:m.followup,
+        last4: prevHistory.slice(-4).map(function(s){ var r=s.records.find(function(x){return x.name===m.name;}); return r&&r.status==="P"?"P":"A"; }) };
+    }).sort(function(a,b){return a.name.localeCompare(b.name);});
+  }, [prevHistory, allMembers, catOverrides]);
+  
   const REPORT_CARD_META = {
     RP: { title: "Regular Present", cat: "R", status: "P", color: "#15803d" },
     IP: { title: "Irregular Present", cat: "I", status: "P", color: "#92400e" },
@@ -2558,7 +2580,11 @@ function App() {
     // Present last session but absent today — matches prevSessionAbsentNow
     // (defined above), NOT a plain category+status filter, so it's handled
     // as a special case inside reportModalData below.
-    PLA: { title: "Present Last Session, Absent Today", cat: "ALL", status: "A", color: "#ea580c" }
+    PLA: { title: "Present Last Session, Absent Today", cat: "ALL", status: "A", color: "#ea580c" },
+    // Regular yuvaks on the edge of slipping to Irregular — matches
+    // atRiskRegular (defined above), not a plain category+status filter,
+    // so it's handled as a special case inside reportModalData below.
+    ARR: { title: "At Risk: Regular \u2192 Irregular", cat: "ALL", status: "A", color: "#b45309" }
   };
   // Friendly labels/ordering for category-wise grouping, used only by the
   // PLA card below (the other cards are already filtered to a single
@@ -2588,6 +2614,23 @@ function App() {
         .map(g => ({ fp: g.fp, members: g.members.sort((a, b) => a.name.localeCompare(b.name)) }));
       return { ...meta, groups, total: matches.length };
     }
+    if (reportModal === "ARR") {
+      // At risk: Regular \u2192 Irregular \u2014 grouped FOLLOWUP-wise. Reuses
+      // the SAME regBecomingIrr list already shown in the Actions tab table
+      // above (attended only 1 of the last 4 sessions AND absent the last
+      // 2), so this share button and that table never disagree.
+      const matches = regBecomingIrr;
+      const byFP = {};
+      matches.forEach(m => {
+        const fp = m.followup || "Unassigned";
+        (byFP[fp] = byFP[fp] || []).push(m);
+      });
+      const groups = Object.keys(byFP).sort().map(fp => ({
+        fp,
+        members: byFP[fp].sort((a, b) => a.name.localeCompare(b.name))
+      }));
+      return { ...meta, groups, total: matches.length };
+    }
     const matches = allMembers.filter(m => {
       const cat = getCategory(m.name, history);
       if (meta.cat !== "ALL" && cat !== meta.cat) return false;
@@ -2604,7 +2647,7 @@ function App() {
       members: byFP[fp].sort((a, b) => a.name.localeCompare(b.name))
     }));
     return { ...meta, groups, total: matches.length };
-  }, [reportModal, allMembers, history, attendance, prevSessionAbsentNow]);
+  }, [reportModal, allMembers, history, attendance, prevSessionAbsentNow, regBecomingIrr]);
 
   function buildReportModalMsg() {
     if (!reportModalData) return "";
@@ -2758,7 +2801,6 @@ function App() {
   }
 
   // ── Historic Data ──────────────────────────────────────────────────────────
-  const prevHistory = useMemo(() => history.filter(s => s.date !== sessionDate), [history, sessionDate]);
   // Parses the app's standard "DD-MM-YYYY" date strings into a real
   // comparable number (YYYYMMDD). This is THE date format used throughout
   // history[] — separate from parseDateKey below, which handles a
@@ -4176,21 +4218,6 @@ function App() {
     }).filter(m => m.riskScore > 0).sort((a, b) => b.riskScore - a.riskScore).slice(0, 20);
   }, [prevHistory, allMembers]);
 
-  // ── Smart Follow-up Action List ──────────────────────────────────────────
-  const regBecomingIrr = useMemo(function() {
-    if (prevHistory.length < 3) return [];
-    return allMembers.filter(function(m) {
-      var cat = getCategory(m.name, prevHistory);
-      if (cat !== "R") return false;
-      var last4 = prevHistory.slice(-4).map(function(s){ var r=s.records.find(function(x){return x.name===m.name;}); return r&&r.status==="P"; });
-      var attended4 = last4.filter(Boolean).length;
-      var recentAbsent = last4.length>=2 && !last4[last4.length-1] && !last4[last4.length-2];
-      return attended4 === 1 && recentAbsent;
-    }).map(function(m) {
-      return { name:m.name, followup:m.followup,
-        last4: prevHistory.slice(-4).map(function(s){ var r=s.records.find(function(x){return x.name===m.name;}); return r&&r.status==="P"?"P":"A"; }) };
-    }).sort(function(a,b){return a.name.localeCompare(b.name);});
-  }, [prevHistory, allMembers, catOverrides]);
   const actionList = useMemo(() => {
     if (prevHistory.length < 2) return [];
     const prevPrev = prevHistory.length > 1 ? prevHistory.slice(0, -1) : [];
@@ -4716,13 +4743,19 @@ function App() {
     setImportPreview(null);
   }
 
-  // All 15 tabs exist, but non-admins (view-only access) don't get tabs whose
-  // entire purpose is editing data — Followup reassignment, New Yuvak
-  // registration, Edit member, Excel import, and Settings (PIN/config/
-  // delete-all). Everything else (Attendance, Dashboard, Report, Historic,
-  // Monthly, Actions, Followup Score, Compare, Profiles) stays visible —
-  // viewers can look at all of it, they just can't change anything.
-  var ADMIN_ONLY_TABS = ['restructure', 'register', 'edit', 'excel', 'settings'];
+  // All 13 tabs exist, but non-admins (view-only access) don't get tabs whose
+  // entire purpose is editing data — New Yuvak registration, Edit member,
+  // Excel import, and Settings (PIN/config/delete-all). Everything else
+  // (Attendance, Dashboard, Report, Historic, Monthly, Actions, Followup,
+  // Profiles) stays visible — viewers can look at all of it, they just
+  // can't change anything. "Followup" itself is a merger of the old
+  // "Followup" (group reassignment) and "Followup Score" (scoreboard)
+  // tabs — it's no longer admin-only as a whole because the scoreboard
+  // portion is view-only; the reassignment controls inside it are instead
+  // individually gated behind `isAdmin &&` (see the "restructure" tab
+  // content further down). "Compare" (yoy) moved to live inside Settings
+  // as its own sub-tab rather than a top-level nav item.
+  var ADMIN_ONLY_TABS = ['register', 'edit', 'excel', 'settings'];
   var ALL_TABS_FULL=[
     ['panel','📋','Attendance'],
     ['dashboard','📈','Dashboard'],
@@ -4731,8 +4764,6 @@ function App() {
     ['monthly','📅','Monthly'],
     ['action','⚡','Actions'],
     ['restructure','🔄','Followup'],
-    ['followupscore','🏆','Followup Score'],
-    ['yoy','📆','Compare'],
     ['register','➕','New Yuvak'],
     ['edit','✏️','Edit'],
     ['profiles','👤','Profiles'],
@@ -4750,6 +4781,20 @@ function App() {
       setTab('panel');
     }
   }, [isAdmin, tab]);
+
+  // Migration: someone's restored UI state (from before Followup Score and
+  // Compare were merged/moved) might still say "followupscore" or "yoy" —
+  // neither renders anything anymore, which would otherwise show a blank
+  // screen. Redirect once on mount to where that content actually lives now.
+  useEffect(function(){
+    if (tab === "followupscore") {
+      setTab("restructure");
+    } else if (tab === "yoy") {
+      setTab("settings");
+      setSettingsTab("compare");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-scroll active tab pill into view whenever tab changes
   React.useEffect(function(){
@@ -7425,7 +7470,7 @@ function App() {
       color: "#666",
       margin: "0 0 16px"
     }
-  }, "Reassign yuvaks between followup groups or create new groups. Changes are saved immediately and reflected across all tabs."), /*#__PURE__*/React.createElement("div", {
+  }, isAdmin ? "Reassign yuvaks between followup groups or create new groups. Changes are saved immediately and reflected across all tabs." : "View who\u2019s in each followup group and see the retention scoreboard below."), /*#__PURE__*/isAdmin && /*#__PURE__*/React.createElement(React.Fragment, null, React.createElement("div", {
     className: "card",
     style: {
       padding: 18,
@@ -7507,7 +7552,7 @@ function App() {
       height: 38
     },
     onClick: doCreateFPGroup
-  }, "Create"))), /*#__PURE__*/React.createElement("div", {
+  }, "Create")))), /*#__PURE__*/React.createElement("div", {
     style: {
       fontWeight: 600,
       fontSize: 14,
@@ -7577,7 +7622,7 @@ function App() {
         color: "#7c3aed",
         marginLeft: 2
       }
-    }, "new"), /*#__PURE__*/React.createElement("button", {
+    }, "new"), /*#__PURE__*/isAdmin && React.createElement("button", {
       title: "Remove from this group",
       onClick: () => {
         var _MASTER$find, _extraMembers$find;
@@ -7614,7 +7659,43 @@ function App() {
     style: {
       color: "#7c3aed"
     }
-  }, "new"), " = registered yuvak"))), tab === "register" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "new"), " = registered yuvak")),
+  /*#__PURE__*/React.createElement("div", { style: { marginTop: 28, paddingTop: 20, borderTop: "1px solid #eee" } },
+  /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement("div", {style:{marginBottom:16}},
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:15,marginBottom:4}}, "\uD83C\uDFC6 Followup Scoreboard"),
+      /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#888"}}, "Retention % per follow-up person across all sessions, ranked highest to lowest")
+    ),
+    fpScorecard.length === 0
+      ? /*#__PURE__*/React.createElement("div",{className:"card",style:{padding:40,textAlign:"center",color:"#aaa"}},"Submit at least one session to see scores.")
+      : /*#__PURE__*/React.createElement("div",{className:"card",style:{overflow:"hidden"}},
+          /*#__PURE__*/React.createElement("div",{style:{display:"flex",padding:"8px 14px",background:"#f8f8f4",fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",borderBottom:"1px solid #eee"}},
+            /*#__PURE__*/React.createElement("span",{style:{width:28}},"#"),
+            /*#__PURE__*/React.createElement("span",{style:{flex:1}},"Follow-up Person"),
+            /*#__PURE__*/React.createElement("span",{style:{width:55,textAlign:"center"}},"Count"),
+            /*#__PURE__*/React.createElement("span",{style:{width:55,textAlign:"center"}},"Avg %"),
+            /*#__PURE__*/React.createElement("span",{style:{width:120}},"Progress")
+          ),
+          fpScorecard.map(function(fp,i){
+            var clr3 = fp.avg>=70?"#15803d":fp.avg>=50?"#d97706":"#b91c1c";
+            var medal = i===0?"🥇":i===1?"🥈":i===2?"🥉":String(i+1);
+            return /*#__PURE__*/React.createElement("div",{key:fp.fp,style:{display:"flex",alignItems:"center",padding:"11px 14px",borderBottom:"1px solid #f0f0f0",background:i===0?"#f0fdf4":"#fff"}},
+              /*#__PURE__*/React.createElement("div",{style:{width:28,fontWeight:700,fontSize:14}},medal),
+              /*#__PURE__*/React.createElement("div",{style:{flex:1,fontWeight:600,fontSize:13}},fp.fp),
+              /*#__PURE__*/React.createElement("div",{style:{width:55,textAlign:"center",fontSize:12,color:"#555"}},fp.members),
+              /*#__PURE__*/React.createElement("div",{style:{width:55,textAlign:"center",fontWeight:700,fontSize:14,color:clr3}},fp.avg+"%"),
+              /*#__PURE__*/React.createElement("div",{style:{width:120}},
+                /*#__PURE__*/React.createElement("div",{style:{background:"#f0f0f0",borderRadius:6,height:8,overflow:"hidden"}},
+                  /*#__PURE__*/React.createElement("div",{style:{width:fp.avg+"%",background:clr3,height:8,borderRadius:6}})
+                ),
+                /*#__PURE__*/React.createElement("div",{style:{fontSize:9,color:"#aaa",marginTop:2}},fp.presentSlots+"/"+fp.totalSlots)
+              )
+            );
+          })
+        )
+  )
+)
+), tab === "register" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 22,
@@ -8991,6 +9072,11 @@ function App() {
     /*#__PURE__*/React.createElement("div", {style:{fontSize:11.5,color:"#92400e",marginBottom:8}},
       "These Regular yuvaks attended only 1 of last 4 sessions and were absent in the last 2. At risk of becoming Irregular."
     ),
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-gray",
+      style: { fontSize: 12, marginBottom: 10 },
+      onClick: () => setReportModal("ARR")
+    }, "\uD83D\uDCCB View & Share by Followup (WhatsApp)"),
     /*#__PURE__*/React.createElement("div", {className:"card",style:{overflow:"hidden"}},
       /*#__PURE__*/React.createElement("div", {style:{display:"flex",padding:"8px 14px",background:"#fffbeb",fontSize:10,fontWeight:700,color:"#92400e",textTransform:"uppercase",borderBottom:"1px solid #fde68a"}},
         /*#__PURE__*/React.createElement("span", {style:{flex:1}}, "Member"),
@@ -9232,373 +9318,7 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
       )
     )
   )
-), tab === "yoy" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: darkMode ? "#94a3b8" : "#666",
-      marginBottom: 16
-    }
-  }, "Compare attendance between any two custom date ranges \u2014 e.g. this month vs last month, or this year vs last year."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 14,
-      marginBottom: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 18,
-      borderLeft: "4px solid #1e40af"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 13,
-      color: "#1e40af",
-      marginBottom: 10
-    }
-  }, "Range A"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      flexDirection: "column"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "From"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange1From,
-    onChange: e => setYoyRange1From(e.target.value)
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "To"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange1To,
-    onChange: e => setYoyRange1To(e.target.value)
-  })))), /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 18,
-      borderLeft: "4px solid #15803d"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 13,
-      color: "#15803d",
-      marginBottom: 10
-    }
-  }, "Range B"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      flexDirection: "column"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "From"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange2From,
-    onChange: e => setYoyRange2From(e.target.value)
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "form-label"
-  }, "To"), /*#__PURE__*/React.createElement("input", {
-    type: "date",
-    className: "form-input",
-    value: yoyRange2To,
-    onChange: e => setYoyRange2To(e.target.value)
-  }))))), (yoyRange1From || yoyRange1To || yoyRange2From || yoyRange2To) && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-      gap: 10,
-      marginBottom: 16
-    }
-  }, [{
-    label: "Sessions",
-    a: yoyData.r1.sessions,
-    b: yoyData.r2.sessions
-  }, {
-    label: "Avg Present",
-    a: yoyData.r1.avgPresent,
-    b: yoyData.r2.avgPresent
-  }, {
-    label: "Avg %",
-    a: yoyData.r1.avgPct + "%",
-    b: yoyData.r2.avgPct + "%"
-  }].map(({
-    label,
-    a,
-    b
-  }) => {
-    const aNum = parseInt(a),
-      bNum = parseInt(b);
-    const aWins = !isNaN(aNum) && !isNaN(bNum) && aNum > bNum;
-    const bWins = !isNaN(aNum) && !isNaN(bNum) && bNum > aNum;
-    return /*#__PURE__*/React.createElement("div", {
-      key: label,
-      className: "card",
-      style: {
-        padding: 16,
-        textAlign: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#888",
-        textTransform: "uppercase",
-        letterSpacing: ".06em",
-        marginBottom: 10
-      }
-    }, label), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        justifyContent: "space-around",
-        alignItems: "center",
-        gap: 8
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#1e40af",
-        fontWeight: 600,
-        marginBottom: 2
-      }
-    }, "Range A"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 22,
-        fontWeight: 700,
-        color: aWins ? "#15803d" : bWins ? "#b91c1c" : "#1e40af"
-      }
-    }, a, aWins ? " 🏆" : "")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 16,
-        color: "#ddd"
-      }
-    }, "vs"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#15803d",
-        fontWeight: 600,
-        marginBottom: 2
-      }
-    }, "Range B"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 22,
-        fontWeight: 700,
-        color: bWins ? "#15803d" : aWins ? "#b91c1c" : "#15803d"
-      }
-    }, b, bWins ? " 🏆" : ""))));
-  })), (yoyData.raw1.length > 0 || yoyData.raw2.length > 0) && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 13,
-      marginBottom: 14
-    }
-  }, "Session-by-session comparison"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 12
-    }
-  }, [{
-    label: "Range A",
-    sessions: yoyData.raw1,
-    color: "#1e40af"
-  }, {
-    label: "Range B",
-    sessions: yoyData.raw2,
-    color: "#15803d"
-  }].map(({
-    label,
-    sessions,
-    color
-  }) => /*#__PURE__*/React.createElement("div", {
-    key: label
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      fontWeight: 600,
-      color,
-      marginBottom: 8
-    }
-  }, label, " (", sessions.length, " sessions)"), sessions.length === 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: "#aaa"
-    }
-  }, "No sessions in this range."), sessions.map((s, i) => {
-    const cnt = s.records.filter(r => r.status === "P").length;
-    const pct2 = allMembers.length ? Math.round(cnt / allMembers.length * 100) : 0;
-    return /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 6
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 80,
-        fontSize: 10,
-        color: "#888",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis"
-      }
-    }, s.date.split(" ").slice(0, 2).join(" ")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        background: "#f3f4f6",
-        borderRadius: 4,
-        height: 16,
-        overflow: "hidden"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        height: "100%",
-        width: `${pct2}%`,
-        background: color,
-        borderRadius: 4,
-        opacity: 0.85
-      }
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 36,
-        fontSize: 11,
-        fontWeight: 600,
-        color,
-        textAlign: "right"
-      }
-    }, pct2, "%"));
-  })))))), !yoyRange1From && !yoyRange1To && !yoyRange2From && !yoyRange2To && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 36,
-      textAlign: "center",
-      color: "#aaa"
-    }
-  }, "Select date ranges above to compare.")), showPrintModal && /*#__PURE__*/React.createElement("div", {
-    className: "modal-bg",
-    onClick: () => setShowPrintModal(false)
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "modal",
-    onClick: e => e.stopPropagation()
-  }, /*#__PURE__*/React.createElement("h2", {
-    style: {
-      margin: "0 0 10px",
-      fontSize: 17
-    }
-  }, "\uD83D\uDDA8 Print / Save Report"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 13,
-      color: "#666",
-      margin: "0 0 16px"
-    }
-  }, "Generates a print-ready A4 report with: today's attendance, followup summary, present/absent lists, and dashboard snapshot."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr 1fr",
-      gap: 8,
-      marginBottom: 18
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Present"), /*#__PURE__*/React.createElement("div", {
-    className: "stat-num",
-    style: {
-      color: "#15803d"
-    }
-  }, totalP)), /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Absent"), /*#__PURE__*/React.createElement("div", {
-    className: "stat-num",
-    style: {
-      color: "#b91c1c"
-    }
-  }, totalA)), /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Sabha"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 600,
-      marginTop: 4
-    }
-  }, sabhaType))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 10,
-      justifyContent: "flex-end"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-gray",
-    onClick: () => setShowPrintModal(false)
-  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-blue",
-    onClick: doPrintReport
-  }, "Open Print View")))),
-
-  tab === "followupscore" && /*#__PURE__*/React.createElement(React.Fragment, null,
-    /*#__PURE__*/React.createElement("div", {style:{marginBottom:16}},
-      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:15,marginBottom:4}}, "\uD83C\uDFC6 Followup Scoreboard"),
-      /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#888"}}, "Retention % per follow-up person across all sessions, ranked highest to lowest")
-    ),
-    /*#__PURE__*/React.createElement("div",{style:{marginTop:24,marginBottom:16}},
-      /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:4}},"🏆 Follow-up Scoreboard"),
-      /*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"#888"}},"Retention % per follow-up person across all sessions")
-    ),
-    fpScorecard.length === 0
-      ? /*#__PURE__*/React.createElement("div",{className:"card",style:{padding:40,textAlign:"center",color:"#aaa"}},"Submit at least one session to see scores.")
-      : /*#__PURE__*/React.createElement("div",{className:"card",style:{overflow:"hidden"}},
-          /*#__PURE__*/React.createElement("div",{style:{display:"flex",padding:"8px 14px",background:"#f8f8f4",fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",borderBottom:"1px solid #eee"}},
-            /*#__PURE__*/React.createElement("span",{style:{width:28}},"#"),
-            /*#__PURE__*/React.createElement("span",{style:{flex:1}},"Follow-up Person"),
-            /*#__PURE__*/React.createElement("span",{style:{width:55,textAlign:"center"}},"Count"),
-            /*#__PURE__*/React.createElement("span",{style:{width:55,textAlign:"center"}},"Avg %"),
-            /*#__PURE__*/React.createElement("span",{style:{width:120}},"Progress")
-          ),
-          fpScorecard.map(function(fp,i){
-            var clr3 = fp.avg>=70?"#15803d":fp.avg>=50?"#d97706":"#b91c1c";
-            var medal = i===0?"🥇":i===1?"🥈":i===2?"🥉":String(i+1);
-            return /*#__PURE__*/React.createElement("div",{key:fp.fp,style:{display:"flex",alignItems:"center",padding:"11px 14px",borderBottom:"1px solid #f0f0f0",background:i===0?"#f0fdf4":"#fff"}},
-              /*#__PURE__*/React.createElement("div",{style:{width:28,fontWeight:700,fontSize:14}},medal),
-              /*#__PURE__*/React.createElement("div",{style:{flex:1,fontWeight:600,fontSize:13}},fp.fp),
-              /*#__PURE__*/React.createElement("div",{style:{width:55,textAlign:"center",fontSize:12,color:"#555"}},fp.members),
-              /*#__PURE__*/React.createElement("div",{style:{width:55,textAlign:"center",fontWeight:700,fontSize:14,color:clr3}},fp.avg+"%"),
-              /*#__PURE__*/React.createElement("div",{style:{width:120}},
-                /*#__PURE__*/React.createElement("div",{style:{background:"#f0f0f0",borderRadius:6,height:8,overflow:"hidden"}},
-                  /*#__PURE__*/React.createElement("div",{style:{width:fp.avg+"%",background:clr3,height:8,borderRadius:6}})
-                ),
-                /*#__PURE__*/React.createElement("div",{style:{fontSize:9,color:"#aaa",marginTop:2}},fp.presentSlots+"/"+fp.totalSlots)
-              )
-            );
-          })
-        )
-  ), tab === "excel" && /*#__PURE__*/React.createElement(React.Fragment, null,
+), tab === "excel" && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement("div", {style:{marginBottom:18}},
       /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:15,marginBottom:4}}, "📥 Excel — Member Directory"),
       /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#888"}}, "Export member list or import updated Reference data. Historic attendance is never affected.")
@@ -9775,7 +9495,7 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
       WebkitOverflowScrolling: "touch",
       scrollbarWidth: "none"
     }
-  }, ([["general", "⚙️ General"], ["pin", "🔒 PIN Lock"], ["backup", "💾 Backup"]].concat(isSuperAdmin ? [["access", "👥 Manage Access"]] : [])).map(([id, label]) => /*#__PURE__*/React.createElement("button", {
+  }, ([["general", "⚙️ General"], ["pin", "🔒 PIN Lock"], ["backup", "💾 Backup"], ["compare", "📆 Compare"]].concat(isSuperAdmin ? [["access", "👥 Manage Access"]] : [])).map(([id, label]) => /*#__PURE__*/React.createElement("button", {
     key: id,
     onClick: () => setSettingsTab(id),
     style: {
@@ -10152,7 +9872,335 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
     style: {
       display: "none"
     }
-  }))))), isSuperAdmin && settingsTab === "access" && /*#__PURE__*/React.createElement(React.Fragment, null,
+  }))))), settingsTab === "compare" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: darkMode ? "#94a3b8" : "#666",
+      marginBottom: 16
+    }
+  }, "Compare attendance between any two custom date ranges \u2014 e.g. this month vs last month, or this year vs last year."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 14,
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 18,
+      borderLeft: "4px solid #1e40af"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      fontSize: 13,
+      color: "#1e40af",
+      marginBottom: 10
+    }
+  }, "Range A"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      flexDirection: "column"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "From"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    className: "form-input",
+    value: yoyRange1From,
+    onChange: e => setYoyRange1From(e.target.value)
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "To"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    className: "form-input",
+    value: yoyRange1To,
+    onChange: e => setYoyRange1To(e.target.value)
+  })))), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 18,
+      borderLeft: "4px solid #15803d"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      fontSize: 13,
+      color: "#15803d",
+      marginBottom: 10
+    }
+  }, "Range B"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      flexDirection: "column"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "From"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    className: "form-input",
+    value: yoyRange2From,
+    onChange: e => setYoyRange2From(e.target.value)
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "To"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    className: "form-input",
+    value: yoyRange2To,
+    onChange: e => setYoyRange2To(e.target.value)
+  }))))), (yoyRange1From || yoyRange1To || yoyRange2From || yoyRange2To) && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+      gap: 10,
+      marginBottom: 16
+    }
+  }, [{
+    label: "Sessions",
+    a: yoyData.r1.sessions,
+    b: yoyData.r2.sessions
+  }, {
+    label: "Avg Present",
+    a: yoyData.r1.avgPresent,
+    b: yoyData.r2.avgPresent
+  }, {
+    label: "Avg %",
+    a: yoyData.r1.avgPct + "%",
+    b: yoyData.r2.avgPct + "%"
+  }].map(({
+    label,
+    a,
+    b
+  }) => {
+    const aNum = parseInt(a),
+      bNum = parseInt(b);
+    const aWins = !isNaN(aNum) && !isNaN(bNum) && aNum > bNum;
+    const bWins = !isNaN(aNum) && !isNaN(bNum) && bNum > aNum;
+    return /*#__PURE__*/React.createElement("div", {
+      key: label,
+      className: "card",
+      style: {
+        padding: 16,
+        textAlign: "center"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#888",
+        textTransform: "uppercase",
+        letterSpacing: ".06em",
+        marginBottom: 10
+      }
+    }, label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-around",
+        alignItems: "center",
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#1e40af",
+        fontWeight: 600,
+        marginBottom: 2
+      }
+    }, "Range A"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 22,
+        fontWeight: 700,
+        color: aWins ? "#15803d" : bWins ? "#b91c1c" : "#1e40af"
+      }
+    }, a, aWins ? " 🏆" : "")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 16,
+        color: "#ddd"
+      }
+    }, "vs"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#15803d",
+        fontWeight: 600,
+        marginBottom: 2
+      }
+    }, "Range B"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 22,
+        fontWeight: 700,
+        color: bWins ? "#15803d" : aWins ? "#b91c1c" : "#15803d"
+      }
+    }, b, bWins ? " 🏆" : ""))));
+  })), (yoyData.raw1.length > 0 || yoyData.raw2.length > 0) && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      fontSize: 13,
+      marginBottom: 14
+    }
+  }, "Session-by-session comparison"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 12
+    }
+  }, [{
+    label: "Range A",
+    sessions: yoyData.raw1,
+    color: "#1e40af"
+  }, {
+    label: "Range B",
+    sessions: yoyData.raw2,
+    color: "#15803d"
+  }].map(({
+    label,
+    sessions,
+    color
+  }) => /*#__PURE__*/React.createElement("div", {
+    key: label
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color,
+      marginBottom: 8
+    }
+  }, label, " (", sessions.length, " sessions)"), sessions.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#aaa"
+    }
+  }, "No sessions in this range."), sessions.map((s, i) => {
+    const cnt = s.records.filter(r => r.status === "P").length;
+    const pct2 = allMembers.length ? Math.round(cnt / allMembers.length * 100) : 0;
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 80,
+        fontSize: 10,
+        color: "#888",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      }
+    }, s.date.split(" ").slice(0, 2).join(" ")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        background: "#f3f4f6",
+        borderRadius: 4,
+        height: 16,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: "100%",
+        width: `${pct2}%`,
+        background: color,
+        borderRadius: 4,
+        opacity: 0.85
+      }
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 36,
+        fontSize: 11,
+        fontWeight: 600,
+        color,
+        textAlign: "right"
+      }
+    }, pct2, "%"));
+  })))))), !yoyRange1From && !yoyRange1To && !yoyRange2From && !yoyRange2To && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 36,
+      textAlign: "center",
+      color: "#aaa"
+    }
+  }, "Select date ranges above to compare.")), showPrintModal && /*#__PURE__*/React.createElement("div", {
+    className: "modal-bg",
+    onClick: () => setShowPrintModal(false)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      margin: "0 0 10px",
+      fontSize: 17
+    }
+  }, "\uD83D\uDDA8 Print / Save Report"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: "#666",
+      margin: "0 0 16px"
+    }
+  }, "Generates a print-ready A4 report with: today's attendance, followup summary, present/absent lists, and dashboard snapshot."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 8,
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Present"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-num",
+    style: {
+      color: "#15803d"
+    }
+  }, totalP)), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Absent"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-num",
+    style: {
+      color: "#b91c1c"
+    }
+  }, totalA)), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Sabha"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      marginTop: 4
+    }
+  }, sabhaType))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-gray",
+    onClick: () => setShowPrintModal(false)
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-blue",
+    onClick: doPrintReport
+  }, "Open Print View")))), isSuperAdmin && settingsTab === "access" && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement("div", { className: "card", style: { padding: 24, marginBottom: 14 } },
       /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 14, marginBottom: 6 } }, "👥 Manage Access"),
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "#666", marginBottom: 16 } },
