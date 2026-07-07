@@ -2394,11 +2394,36 @@ function App() {
 
   // ── Share Report as Image on WhatsApp ──────────────────────────────────────
   const reportPanelRef = useRef(null);
+  // Ref for the table's own horizontal-scroll wrapper (the table has
+  // minWidth:700 and normally scrolls sideways on a narrow phone screen).
+  const reportTableWrapRef = useRef(null);
   function shareReportAsImage() {
     const el = reportPanelRef.current;
     if (!el) { toast_("Report panel not found", "error"); return; }
     toast_("Generating report image\u2026");
-    html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#f5f4f0" }).then(function(canvas) {
+    const wrap = reportTableWrapRef.current;
+    // On mobile the report table is wider than the screen and normally
+    // scrolls horizontally inside its own wrapper. Captured as-is, that
+    // means only the currently-visible (scrolled) slice gets rendered —
+    // the right-hand columns (Irregular/No/Total) get cropped clean off.
+    // Fix: temporarily let both the outer panel and the table's wrapper
+    // lay out at their full natural width (no clipping, no scrollbar),
+    // capture at that full width, then put everything back exactly as
+    // it was so the on-screen UI is untouched.
+    const prevElOverflow = el.style.overflow;
+    const prevElWidth = el.style.width;
+    const prevWrapOverflowX = wrap ? wrap.style.overflowX : null;
+    el.style.overflow = "visible";
+    if (wrap) wrap.style.overflowX = "visible";
+    const fullWidth = el.scrollWidth;
+    el.style.width = fullWidth + "px";
+    function restoreStyles() {
+      el.style.overflow = prevElOverflow;
+      el.style.width = prevElWidth;
+      if (wrap) wrap.style.overflowX = prevWrapOverflowX;
+    }
+    html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#f5f4f0", width: fullWidth, windowWidth: fullWidth }).then(function(canvas) {
+      restoreStyles();
       canvas.toBlob(function(blob) {
         if (!blob) { toast_("Could not generate image", "error"); return; }
         const fname = "Shreeji_Report_" + sessionDate.replace(/ /g,"_") + ".png";
@@ -2411,7 +2436,7 @@ function App() {
           fallbackDownload(blob, fname);
         }
       }, "image/png");
-    }).catch(function(e) { toast_("Image generation failed", "error"); });
+    }).catch(function(e) { restoreStyles(); toast_("Image generation failed", "error"); });
   }
   function fallbackDownload(blob, fname) {
     const url = URL.createObjectURL(blob);
@@ -6775,6 +6800,7 @@ function App() {
     })
   ),
   /*#__PURE__*/React.createElement("div", {
+    ref: reportTableWrapRef,
     style: {
       overflowX: "auto"
     }
