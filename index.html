@@ -5159,149 +5159,96 @@ function App() {
     }
   }, "\uD83D\uDCCA Attendance Trend \u2014 Last ", dashData.trend.length, " Sessions"), (() => {
     const data = dashData.trend;
-    const W = 600,
-      H = 200,
-      PL = 40,
-      PR = 16,
-      PT = 16,
-      PB = 48;
-    const iW = W - PL - PR,
-      iH = H - PT - PB;
-    const maxVal = Math.max(...data.map(d => d.totalMembers), 1);
+    const W = 640, H = 230, PL = 36, PR = 46, PT = 20, PB = 34;
+    const iW = W - PL - PR, iH = H - PT - PB;
+    const rawMax = Math.max(...data.map(d => d.totalMembers), 1);
+    const niceMax = Math.max(10, Math.ceil(rawMax / 10) * 10);
     const xStep = data.length > 1 ? iW / (data.length - 1) : iW;
-    const yScale = v => iH - v / maxVal * iH;
-    const pts = key => data.map((d, i) => `${PL + (data.length > 1 ? i * xStep : iW / 2)},${PT + yScale(d[key])}`).join(" ");
-    const area = key => {
-      const first = `${PL + (data.length > 1 ? 0 : iW / 2)},${PT + iH}`;
-      const last = `${PL + (data.length > 1 ? (data.length - 1) * xStep : iW / 2)},${PT + iH}`;
+    const xAt = i => PL + (data.length > 1 ? i * xStep : iW / 2);
+    const yScale = v => iH - (v / niceMax) * iH;
+    const pts = key => data.map((d, i) => `${xAt(i)},${PT + yScale(d[key])}`).join(" ");
+    const areaPath = key => {
+      const first = `${xAt(0)},${PT + iH}`;
+      const last = `${xAt(data.length - 1)},${PT + iH}`;
       return `${first} ${pts(key)} ${last}`;
     };
-    const yLines = [0, 25, 50, 75, 100].map(p => Math.round(maxVal * p / 100));
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        overflowX: "auto"
-      }
-    }, /*#__PURE__*/React.createElement("svg", {
-      viewBox: `0 0 ${W} ${H}`,
-      style: {
-        width: "100%",
-        maxWidth: W,
-        display: "block"
-      }
-    }, yLines.map(v => /*#__PURE__*/React.createElement("g", {
-      key: v
-    }, /*#__PURE__*/React.createElement("line", {
-      x1: PL,
-      y1: PT + yScale(v),
-      x2: W - PR,
-      y2: PT + yScale(v),
-      stroke: "#f0f0f0",
-      strokeWidth: "1"
-    }), /*#__PURE__*/React.createElement("text", {
-      x: PL - 4,
-      y: PT + yScale(v) + 4,
-      textAnchor: "end",
-      fontSize: "11",
-      fill: "#bbb"
-    }, v))), /*#__PURE__*/React.createElement("polygon", {
-      points: area("totalPresent"),
-      fill: "#dbeafe",
-      opacity: "0.6"
-    }), /*#__PURE__*/React.createElement("polygon", {
-      points: area("regPresent"),
-      fill: "#dcfce7",
-      opacity: "0.7"
-    }), /*#__PURE__*/React.createElement("polygon", {
-      points: area("regAbsent"),
-      fill: "#fee2e2",
-      opacity: "0.6"
-    }), /*#__PURE__*/React.createElement("polyline", {
-      points: pts("totalPresent"),
-      fill: "none",
-      stroke: "#1e40af",
-      strokeWidth: "2.5",
-      strokeLinejoin: "round"
-    }), /*#__PURE__*/React.createElement("polyline", {
-      points: pts("regPresent"),
-      fill: "none",
-      stroke: "#15803d",
-      strokeWidth: "2",
-      strokeLinejoin: "round",
-      strokeDasharray: "0"
-    }), /*#__PURE__*/React.createElement("polyline", {
-      points: pts("regAbsent"),
-      fill: "none",
-      stroke: "#dc2626",
-      strokeWidth: "2",
-      strokeLinejoin: "round",
-      strokeDasharray: "4 3"
-    }), /*#__PURE__*/React.createElement("polyline", {
-      points: pts("irrPresent"),
-      fill: "none",
-      stroke: "#d97706",
-      strokeWidth: "1.5",
-      strokeLinejoin: "round",
-      strokeDasharray: "2 3"
-    }), data.map((d, i) => {
-      const x = PL + (data.length > 1 ? i * xStep : iW / 2);
-      const yP = PT + yScale(d.totalPresent);
-      const yR = PT + yScale(d.regPresent);
-      const yA = PT + yScale(d.regAbsent);
-      const label = d.date.split(" ").slice(0, 2).join(" ");
-      return /*#__PURE__*/React.createElement("g", {
-        key: i
-      }, /*#__PURE__*/React.createElement("circle", {
-        cx: x,
-        cy: yP,
-        r: "4",
-        fill: "#1e40af",
-        stroke: "#fff",
-        strokeWidth: "1.5"
-      }), /*#__PURE__*/React.createElement("circle", {
-        cx: x,
-        cy: yR,
-        r: "3.5",
-        fill: "#15803d",
-        stroke: "#fff",
-        strokeWidth: "1.5"
-      }), /*#__PURE__*/React.createElement("circle", {
-        cx: x,
-        cy: yA,
-        r: "3.5",
-        fill: "#dc2626",
-        stroke: "#fff",
-        strokeWidth: "1.5"
-      }), /*#__PURE__*/React.createElement("text", {
-        x: x,
-        y: H - 4,
-        textAnchor: "middle",
-        fontSize: "12",
-        fill: "#999",
-        transform: `rotate(-35,${x},${H - 4})`
-      }, label), /*#__PURE__*/React.createElement("text", {
-        x: x,
-        y: yP - 8,
-        textAnchor: "middle",
-        fontSize: "11",
-        fill: "#1e40af",
-        fontWeight: "600"
-      }, d.totalPresent));
-    }), [["#1e40af", "Total Present"], ["#15803d", "Regular Present"], ["#dc2626", "Regular Absent"], ["#d97706", "Irregular Present"]].map(([c, l], i) => /*#__PURE__*/React.createElement("g", {
-      key: l,
-      transform: `translate(${PL + i * 135},${H - 10})`
-    }, /*#__PURE__*/React.createElement("line", {
-      x1: "0",
-      y1: "-3",
-      x2: "14",
-      y2: "-3",
-      stroke: c,
-      strokeWidth: "2"
-    }), /*#__PURE__*/React.createElement("text", {
-      x: "17",
-      y: "0",
-      fontSize: "11",
-      fill: "#666"
-    }, l)))));
+    const yTicks = [0, 0.25, 0.5, 0.75, 1].map(p => Math.round(niceMax * p));
+    // Single source of truth for every line's color/width/label \u2014 keeps the
+    // SVG, the points, and the legend all perfectly in sync.
+    const SERIES = [
+      { key: "totalPresent", color: "#2563eb", label: "Total Present", width: 3, r: 3.5 },
+      { key: "regPresent", color: "#16a34a", label: "Regular Present", width: 2, r: 2.6 },
+      { key: "regAbsent", color: "#ef4444", label: "Regular Absent", width: 2, r: 2.6 },
+      { key: "irrPresent", color: "#f59e0b", label: "Irregular Present", width: 2, r: 2.6 }
+    ];
+    // Thin out x-axis date labels once there are more than ~8 sessions, so
+    // they never crowd into each other \u2014 always keep the first and last.
+    const labelStep = data.length > 8 ? Math.ceil(data.length / 8) : 1;
+    const showLabel = i => i === 0 || i === data.length - 1 || i % labelStep === 0;
+    const last = data[data.length - 1];
+    return /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", { style: { overflowX: "auto" } },
+        /*#__PURE__*/React.createElement("svg", {
+          viewBox: `0 0 ${W} ${H}`,
+          style: { width: "100%", maxWidth: W, display: "block" }
+        },
+          /*#__PURE__*/React.createElement("defs", null,
+            /*#__PURE__*/React.createElement("linearGradient", { id: "trendAreaFill", x1: "0", y1: "0", x2: "0", y2: "1" },
+              /*#__PURE__*/React.createElement("stop", { offset: "0%", stopColor: "#2563eb", stopOpacity: 0.16 }),
+              /*#__PURE__*/React.createElement("stop", { offset: "100%", stopColor: "#2563eb", stopOpacity: 0.01 })
+            )
+          ),
+          // Gridlines + y-axis labels \u2014 light, out of the way
+          yTicks.map(v => /*#__PURE__*/React.createElement("g", { key: v },
+            /*#__PURE__*/React.createElement("line", {
+              x1: PL, y1: PT + yScale(v), x2: W - PR, y2: PT + yScale(v),
+              stroke: "#eef1f4", strokeWidth: 1
+            }),
+            /*#__PURE__*/React.createElement("text", {
+              x: PL - 8, y: PT + yScale(v) + 3, textAnchor: "end", fontSize: 10, fill: "#a8adb4"
+            }, v)
+          )),
+          // Just ONE soft gradient fill, under the headline series only \u2014
+          // stacking translucent fills for every line was what made the old
+          // chart look muddy.
+          /*#__PURE__*/React.createElement("polygon", { points: areaPath("totalPresent"), fill: "url(#trendAreaFill)" }),
+          // Clean solid lines for every series, no dashes \u2014 color alone
+          // (matched to the legend below) is enough to tell them apart.
+          SERIES.map(s => /*#__PURE__*/React.createElement("polyline", {
+            key: s.key, points: pts(s.key), fill: "none", stroke: s.color,
+            strokeWidth: s.width, strokeLinejoin: "round", strokeLinecap: "round"
+          })),
+          // Small points with a native hover tooltip (title) instead of a
+          // permanent on-chart number for every single point \u2014 that
+          // per-point labeling was the main source of the clutter/overlap.
+          data.map((d, i) => /*#__PURE__*/React.createElement("g", { key: i },
+            SERIES.map(s => /*#__PURE__*/React.createElement("circle", {
+              key: s.key, cx: xAt(i), cy: PT + yScale(d[s.key]), r: s.r,
+              fill: s.color, stroke: "#fff", strokeWidth: 1.2
+            }, /*#__PURE__*/React.createElement("title", null, `${s.label}: ${d[s.key]} \u2014 ${d.date}`))),
+            showLabel(i) && /*#__PURE__*/React.createElement("text", {
+              x: xAt(i), y: H - 10, textAnchor: "middle", fontSize: 10, fill: "#9aa1ab"
+            }, d.date.split(" ").slice(0, 2).join(" "))
+          )),
+          // The one number worth always showing without hovering: today's
+          // headline Total Present count, pinned beside the last point.
+          last && /*#__PURE__*/React.createElement("text", {
+            x: xAt(data.length - 1) + 8, y: PT + yScale(last.totalPresent) + 4,
+            textAnchor: "start", fontSize: 13, fontWeight: 700, fill: "#2563eb"
+          }, last.totalPresent)
+        )
+      ),
+      // Legend lives OUTSIDE the SVG as plain HTML \u2014 it wraps naturally
+      // on narrow phone screens instead of overlapping the x-axis labels.
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", flexWrap: "wrap", gap: "8px 18px", justifyContent: "center", marginTop: 12 }
+      }, SERIES.map(s => /*#__PURE__*/React.createElement("div", {
+        key: s.key, style: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#666" }
+      },
+        /*#__PURE__*/React.createElement("span", { style: { width: 9, height: 9, borderRadius: 5, background: s.color, display: "inline-block", flexShrink: 0 } }),
+        s.label
+      )))
+    );
   })()), /*#__PURE__*/React.createElement("div", {
     className: "dash-2col",
     style: {
@@ -6961,11 +6908,14 @@ function App() {
     }
   }, /*#__PURE__*/React.createElement("td", {
     style: {
-      fontWeight: 700
+      fontWeight: 700,
+      color: "#fff"
     }
   }, "TOTAL"), /*#__PURE__*/React.createElement("td", {
     style: {
-      textAlign: "center"
+      textAlign: "center",
+      fontWeight: 700,
+      color: "#fff"
     }
   }, allMembers.length), /*#__PURE__*/React.createElement("td", {
     style: {
