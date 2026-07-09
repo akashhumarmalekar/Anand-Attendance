@@ -1,9 +1,12 @@
-<!DOCTYPE html> 
-<html lang="en"> 
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="UTF-8"/> 
+<meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>|| Akshar Anand || Attendance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      FIREBASE — Authentication (Google Sign-In) + Firestore (shared data)
@@ -485,8 +488,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 html{scroll-behavior:smooth;}
 body{
   margin:0;
-  background:#f0f2f5;
-  font-family:'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
+  background:#f4f6f9;
+  font-family:'Inter','Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
   font-size:14px;
   line-height:1.5;
   -webkit-font-smoothing:antialiased;
@@ -496,11 +499,12 @@ button:active{transform:scale(.97);}
 
 /* ── Design Tokens ─────────────────────────────────────────────────────────── */
 :root{
-  /* Brand/accent — indigo, chosen for the new glass theme. Replaces the
-     old blue (#2563eb) as the primary interactive color throughout. */
-  --primary:#6366f1;
-  --primary-dark:#4f46e5;
-  --primary-light:#eef2ff;
+  /* Brand/accent — a crisp, professional blue. Replaces the earlier indigo/
+     purple "glass" palette with something that reads more corporate/
+     finance-grade (the same family already used on the sign-in screen). */
+  --primary:#2563eb;
+  --primary-dark:#1d4ed8;
+  --primary-light:#eff6ff;
   /* Functional category colors are UNCHANGED on purpose — your team has
      already learned green=Regular/Present, amber=Irregular, rose=No/
      Absent. Retraining that association would cost more than any visual
@@ -525,42 +529,42 @@ button:active{transform:scale(.97);}
   --radius-md:14px;
   --radius-lg:18px;
   --radius-xl:24px;
-  /* Shadows tinted toward indigo instead of pure black — softer, more
-     "glass" looking depth instead of a flat drop-shadow. */
-  --shadow-sm:0 1px 3px rgba(79,70,229,.06),0 1px 2px rgba(79,70,229,.04);
-  --shadow-md:0 4px 20px rgba(79,70,229,.08);
-  --shadow-lg:0 8px 32px rgba(79,70,229,.12);
-  --shadow-xl:0 20px 60px rgba(79,70,229,.16);
+  /* Shadows tinted toward the brand blue instead of pure black — softer,
+     more "glass" looking depth instead of a flat drop-shadow. */
+  --shadow-sm:0 1px 3px rgba(37,99,235,.06),0 1px 2px rgba(37,99,235,.04);
+  --shadow-md:0 4px 20px rgba(37,99,235,.08);
+  --shadow-lg:0 8px 32px rgba(37,99,235,.12);
+  --shadow-xl:0 20px 60px rgba(37,99,235,.16);
   /* Glass surface tokens — the actual frosted-glass treatment used on
      the navbar and elevated cards. backdrop-filter needs something
      translucent (not a solid color) sitting over a non-flat page
      background to read as "glass" at all. */
-  --glass-bg:rgba(255,255,255,.7);
-  --glass-bg-strong:rgba(255,255,255,.85);
-  --glass-border:rgba(255,255,255,.9);
-  --glass-blur:blur(18px);
-  --border:#e7e5ff;
-  /* Soft indigo-tinted gradient page background instead of flat gray —
+  --glass-bg:rgba(255,255,255,.78);
+  --glass-bg-strong:rgba(255,255,255,.92);
+  --glass-border:rgba(226,232,240,.9);
+  --glass-blur:blur(14px);
+  --border:#e2e8f0;
+  /* Soft blue-tinted gradient page background instead of flat gray —
      this is what the glass cards actually show through. */
-  --bg-page:linear-gradient(160deg,#eef2ff 0%,#f8fafc 50%,#f1f5f9 100%);
+  --bg-page:linear-gradient(160deg,#eff6ff 0%,#f8fafc 50%,#f1f5f9 100%);
   --bg-card:#ffffff;
-  --bg-muted:#f5f5ff;
-  --text-primary:#1e1b4b;
-  --text-secondary:#5b5b7a;
-  --text-muted:#9ca3af;
+  --bg-muted:#f1f5f9;
+  --text-primary:#0f172a;
+  --text-secondary:#475569;
+  --text-muted:#94a3b8;
   --t:all .18s cubic-bezier(.4,0,.2,1);
 }
 .dark{
-  --bg-page:linear-gradient(160deg,#1e1b4b 0%,#0f172a 60%,#0b1120 100%);
-  --bg-card:#1e1b3a;
-  --bg-muted:#191736;
-  --border:#332f63;
-  --text-primary:#ede9fe;
-  --text-secondary:#a5a3c4;
-  --text-muted:#6b6890;
-  --glass-bg:rgba(30,27,58,.6);
-  --glass-bg-strong:rgba(30,27,58,.78);
-  --glass-border:rgba(99,102,241,.25);
+  --bg-page:linear-gradient(160deg,#0f172a 0%,#0b1220 60%,#080b13 100%);
+  --bg-card:#111c2e;
+  --bg-muted:#0f1a29;
+  --border:#233245;
+  --text-primary:#f1f5f9;
+  --text-secondary:#94a3b8;
+  --text-muted:#64748b;
+  --glass-bg:rgba(15,23,42,.62);
+  --glass-bg-strong:rgba(15,23,42,.85);
+  --glass-border:rgba(59,130,246,.2);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -581,7 +585,7 @@ button:active{transform:scale(.97);}
   position:fixed;
   top:0;left:0;right:0;
   height:var(--navbar-h);
-  background:linear-gradient(135deg,#4338ca 0%,#6366f1 100%);
+  background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 100%);
   backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
   display:flex;
   align-items:center;
@@ -589,7 +593,7 @@ button:active{transform:scale(.97);}
   gap:10px;
   padding:0 14px;
   z-index:500;
-  box-shadow:0 1px 0 rgba(255,255,255,.12),0 4px 24px rgba(67,56,202,.25);
+  box-shadow:0 1px 0 rgba(255,255,255,.12),0 4px 24px rgba(30,58,138,.28);
 }
 
 .navbar-brand{
@@ -713,7 +717,7 @@ button:active{transform:scale(.97);}
   backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
   border-top:1px solid var(--glass-border);
   border-bottom:1px solid var(--glass-border);
-  box-shadow:0 2px 12px rgba(79,70,229,.06);
+  box-shadow:0 2px 12px rgba(29,78,216,.06);
   z-index:490;
   display:flex;
   align-items:stretch;
@@ -766,7 +770,7 @@ button:active{transform:scale(.97);}
 }
 .tab-pill.active::after{transform:scaleX(1);}
 .dark .tab-pill.active{
-  background:rgba(99,102,241,.18);
+  background:rgba(37,99,235,.18);
 }
 .tab-pill:hover:not(.active){
   color:var(--text-secondary);
@@ -874,10 +878,10 @@ tr:hover td{background:#eff6ff !important;}
   color:var(--text-primary);background:var(--bg-card);width:100%;
   transition:var(--t);
 }
-.input-s:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.12);}
+.input-s:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12);}
 .input-s::placeholder{color:var(--text-muted);}
 .dark .input-s{background:var(--glass-bg);border-color:var(--glass-border);color:var(--text-primary);}
-.dark .input-s:focus{border-color:#818cf8;}
+.dark .input-s:focus{border-color:#60a5fa;}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    BUTTONS
@@ -896,9 +900,9 @@ tr:hover td{background:#eff6ff !important;}
 .btn-orange{background:var(--warning);color:#fff;}
 .btn-red{background:var(--danger);color:#fff;}
 .btn-wa{background:#25D366;color:#fff;}
-.btn-gray{background:rgba(99,102,241,.08);color:var(--text-secondary);border:1px solid var(--glass-border);}
-.btn-gray:hover{background:rgba(99,102,241,.14);}
-.dark .btn-gray{background:rgba(99,102,241,.12);color:var(--text-primary);border-color:var(--glass-border);}
+.btn-gray{background:rgba(37,99,235,.08);color:var(--text-secondary);border:1px solid var(--glass-border);}
+.btn-gray:hover{background:rgba(37,99,235,.14);}
+.dark .btn-gray{background:rgba(37,99,235,.12);color:var(--text-primary);border-color:var(--glass-border);}
 .btn-purple{background:var(--purple);color:#fff;}
 
 .wa-menu-item{
@@ -907,8 +911,8 @@ tr:hover td{background:#eff6ff !important;}
   background:transparent;cursor:pointer;transition:var(--t);
   min-height:44px;
 }
-.wa-menu-item:hover{background:rgba(99,102,241,.08);}
-.dark .wa-menu-item:hover{background:rgba(99,102,241,.15);}
+.wa-menu-item:hover{background:rgba(37,99,235,.08);}
+.dark .wa-menu-item:hover{background:rgba(37,99,235,.15);}
 .btn-teal{background:var(--teal);color:#fff;}
 
 /* Row action buttons (mark Present/Absent, call, WhatsApp) used throughout
@@ -1025,10 +1029,10 @@ tr:hover td{background:#eff6ff !important;}
   border:1.5px solid var(--border);font-size:13px;
   color:var(--text-primary);background:var(--bg-card);transition:var(--t);
 }
-.form-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.12);}
+.form-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12);}
 .form-input::placeholder{color:var(--text-muted);}
 .dark .form-input{background:var(--glass-bg);border-color:var(--glass-border);color:var(--text-primary);}
-.dark .form-input:focus{border-color:#818cf8;}
+.dark .form-input:focus{border-color:#60a5fa;}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    UI COMPONENTS
@@ -1038,26 +1042,26 @@ tr:hover td{background:#eff6ff !important;}
 .fp-group-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg-muted);border-bottom:1px solid var(--border);cursor:pointer;}
 .fp-group-header:hover{background:#f1f5f9;}
 .dark .fp-group-card{background:var(--glass-bg);border-color:var(--glass-border);}
-.dark .fp-group-header{background:rgba(99,102,241,.1);}
-.dark .fp-group-header:hover{background:rgba(99,102,241,.16);}
+.dark .fp-group-header{background:rgba(37,99,235,.1);}
+.dark .fp-group-header:hover{background:rgba(37,99,235,.16);}
 
 .db-row{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border);transition:background .12s;}
 .db-row:last-child{border-bottom:none;}
 .db-row:hover{background:var(--bg-muted);}
 .dark .db-row{border-color:var(--glass-border);}
-.dark .db-row:hover{background:rgba(99,102,241,.08);}
+.dark .db-row:hover{background:rgba(37,99,235,.08);}
 
-.stat-card{background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--glass-border);border-radius:var(--radius-md);padding:14px 16px;text-align:center;box-shadow:0 2px 10px rgba(79,70,229,.05);}
+.stat-card{background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--glass-border);border-radius:var(--radius-md);padding:14px 16px;text-align:center;box-shadow:0 2px 10px rgba(29,78,216,.05);}
 .stat-label{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;font-weight:600;}
 .stat-num{font-size:24px;font-weight:800;color:var(--text-primary);line-height:1.1;}
-.dark .stat-card{background:rgba(99,102,241,.1);border-color:var(--glass-border);}
+.dark .stat-card{background:rgba(37,99,235,.1);border-color:var(--glass-border);}
 
 .timeslot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
 .timeslot-card{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius-md);padding:14px 10px;text-align:center;}
-.dark .timeslot-card{background:rgba(99,102,241,.1);border-color:var(--glass-border);}
+.dark .timeslot-card{background:rgba(37,99,235,.1);border-color:var(--glass-border);}
 .timeslot-label{font-size:10px;color:var(--primary-dark);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;font-weight:700;}
 .timeslot-num{font-size:28px;font-weight:800;color:var(--primary);line-height:1;}
-.dark .timeslot-num{color:#818cf8;}
+.dark .timeslot-num{color:#60a5fa;}
 .timeslot-sub{font-size:10px;color:#64748b;margin-top:2px;}
 @media(max-width:480px){.timeslot-grid{grid-template-columns:1fr 1fr;}.timeslot-num{font-size:22px;}}
 
@@ -1088,7 +1092,7 @@ tr:hover td{background:#eff6ff !important;}
   content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
   background:var(--dash-card-accent,var(--primary));
 }
-.dash-stat-card:hover{box-shadow:0 12px 28px -10px rgba(79,70,229,.35) !important;}
+.dash-stat-card:hover{box-shadow:0 12px 28px -10px rgba(29,78,216,.35) !important;}
 .dash-stat-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;}
 .dash-stat-icon{
   width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;
@@ -4158,10 +4162,10 @@ function App() {
     // screens (e.g. the auth gate, rendered before .app-shell mounts)
     // rely on the body's own background.
     document.body.style.background = darkMode
-      ? "linear-gradient(160deg,#1e1b4b 0%,#0f172a 60%,#0b1120 100%)"
-      : "linear-gradient(160deg,#eef2ff 0%,#f8fafc 50%,#f1f5f9 100%)";
+      ? "linear-gradient(160deg,#0f172a 0%,#0b1220 60%,#080b13 100%)"
+      : "linear-gradient(160deg,#eff6ff 0%,#f8fafc 50%,#f1f5f9 100%)";
     document.body.style.backgroundAttachment = "fixed";
-    document.body.style.color = darkMode ? "#ede9fe" : "#1e1b4b";
+    document.body.style.color = darkMode ? "#f1f5f9" : "#0f172a";
   }, [darkMode]);
 
   // ── UI state persistence (tab, filters, search) ─────────────────────────
@@ -5157,10 +5161,10 @@ function App() {
     title: k.id ? "Click to view list" : undefined,
     style: {
       "--dash-card-accent": k.color,
-      background: darkMode ? "rgba(99,102,241,.1)" : k.bg,
+      background: darkMode ? "rgba(37,99,235,.1)" : k.bg,
       backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
       border: darkMode ? "1px solid var(--glass-border)" : `1px solid ${k.color}1a`,
-      boxShadow: "0 2px 12px rgba(79,70,229,.05)",
+      boxShadow: "0 2px 12px rgba(29,78,216,.05)",
       cursor: k.id ? "pointer" : "default"
     },
     onMouseEnter: k.id ? e => { e.currentTarget.style.transform = "translateY(-2px)"; } : undefined,
@@ -6778,7 +6782,7 @@ function App() {
     /*#__PURE__*/React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: "#ea580c" } }, prevSessionAbsentNow.length)
   ),
   /*#__PURE__*/React.createElement("div", {ref:reportPanelRef, style:{background:"#fff",borderRadius:12,border:"1px solid #e5e5e5",overflow:"hidden"}},
-  /*#__PURE__*/React.createElement("div", {style:{background:"#312e81",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}},
+  /*#__PURE__*/React.createElement("div", {style:{background:"#1e3a8a",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}},
     /*#__PURE__*/React.createElement("div", {style:{color:"#fff",fontWeight:700,fontSize:14}}, "\uD83D\uDE4F \u2016 Akshar Anand \u2016 \u2014 Follow-up Report"),
     /*#__PURE__*/React.createElement("div", {style:{color:"#aaa",fontSize:12}}, sessionDate, " \u00B7 ", sabhaType)
   ),
@@ -6947,7 +6951,7 @@ function App() {
     }
   }, r.totalA))), /*#__PURE__*/React.createElement("tr", {
     style: {
-      background: "#312e81",
+      background: "#1e3a8a",
       color: "#fff"
     }
   }, /*#__PURE__*/React.createElement("td", {
@@ -7135,7 +7139,7 @@ function App() {
       position: "sticky",
       left: 0,
       zIndex: 2,
-      background: "#312e81"
+      background: "#1e3a8a"
     },
     onClick: () => sortHist("name")
   }, "Name / Category ", sortArrow("name"), /*#__PURE__*/React.createElement("br", null),
@@ -7148,7 +7152,7 @@ function App() {
       position: "sticky",
       left: 0,
       zIndex: 2,
-      background: "#312e81"
+      background: "#1e3a8a"
     },
     onClick: () => sortHist("name")
   }, "Name ", sortArrow("name")), /*#__PURE__*/React.createElement("th", {
@@ -7159,7 +7163,7 @@ function App() {
       position: "sticky",
       left: 180,
       zIndex: 2,
-      background: "#312e81"
+      background: "#1e3a8a"
     },
     onClick: () => sortHist("followup")
   }, "Followup ", sortArrow("followup")), /*#__PURE__*/React.createElement("th", {
@@ -7170,7 +7174,7 @@ function App() {
       position: "sticky",
       left: 310,
       zIndex: 2,
-      background: "#312e81"
+      background: "#1e3a8a"
     },
     onClick: () => sortHist("cat")
   }, "Category ", sortArrow("cat")), /*#__PURE__*/React.createElement("th", {
@@ -7181,7 +7185,7 @@ function App() {
       position: "sticky",
       left: 390,
       zIndex: 2,
-      background: "#312e81"
+      background: "#1e3a8a"
     },
     onClick: () => sortHist("totalAtt")
   }, "\u2705 Total ", sortArrow("totalAtt")), filteredDates.map(d => /*#__PURE__*/React.createElement("th", {
@@ -8936,7 +8940,7 @@ function App() {
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
-        background: "#312e81",
+        background: "#1e3a8a",
         color: "#fff",
         padding: "12px 18px",
         display: "flex",
@@ -10458,7 +10462,7 @@ tab === "profiles" && /*#__PURE__*/React.createElement(React.Fragment, null,
       onClick: e => e.stopPropagation()
     }, /*#__PURE__*/React.createElement("div", {
       style: {
-        background: "#312e81",
+        background: "#1e3a8a",
         borderRadius: "16px 16px 0 0",
         padding: "20px 22px",
         color: "#fff"
@@ -11108,13 +11112,13 @@ function AuthGate() {
   }
 
   const screenStyle = {
-    position: "fixed", inset: 0, background: "linear-gradient(160deg,#312e81 0%,#1e1b4b 60%,#0b1120 100%)", display: "flex",
+    position: "fixed", inset: 0, background: "linear-gradient(160deg,#1e3a8a 0%,#0f172a 60%,#0b1220 100%)", display: "flex",
     alignItems: "center", justifyContent: "center", zIndex: 99999, padding: 20
   };
   const cardStyle = {
     background: "rgba(255,255,255,.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
     border: "1px solid rgba(255,255,255,.6)", borderRadius: 24, padding: "36px 30px", maxWidth: 380,
-    width: "100%", textAlign: "center", boxShadow: "0 20px 60px rgba(49,46,129,.35)"
+    width: "100%", textAlign: "center", boxShadow: "0 20px 60px rgba(30,58,138,.35)"
   };
 
   // ── Firebase config not yet pasted in ───────────────────────────────
