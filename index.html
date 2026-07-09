@@ -1073,6 +1073,41 @@ tr:hover td{background:#eff6ff !important;}
   .dash-2col{grid-template-columns:1fr !important;}
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   DASHBOARD POLISH — stat cards with icon badges + accent bar, chart card
+   headers with icon badges, and a horizontal-scroll wrapper so any SVG
+   chart with many data points scales its own width instead of squeezing
+   bars/points into a fixed too-narrow viewBox.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.dash-stat-card{
+  position:relative;border-radius:var(--radius-lg);padding:16px 16px 15px 18px;
+  overflow:hidden;
+  transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s cubic-bezier(.4,0,.2,1);
+}
+.dash-stat-card::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--dash-card-accent,var(--primary));
+}
+.dash-stat-card:hover{box-shadow:0 12px 28px -10px rgba(79,70,229,.35) !important;}
+.dash-stat-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;}
+.dash-stat-icon{
+  width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  font-size:14px;background:var(--dash-card-accent,var(--primary));
+  box-shadow:0 3px 8px -2px rgba(0,0,0,.25);flex-shrink:0;
+}
+
+.dash-card-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.dash-card-icon{
+  width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:15px;flex-shrink:0;box-shadow:0 3px 8px -2px rgba(0,0,0,.22);
+}
+.dash-card-title{font-weight:700;font-size:14.5px;color:var(--text-primary);line-height:1.25;}
+.dash-card-sub{font-size:11px;color:var(--text-muted);font-weight:400;margin-top:1px;}
+
+.chart-scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;}
+.chart-scroll svg{display:block;}
+.chart-scroll::-webkit-scrollbar{height:5px;}
+
 /* Tab strip on small phones: the icon+label pills were tight against each
    other with 15 tabs all needing horizontal scroll, reading as a cluttered
    wall of text. Below 480px, collapse to icon-only pills (with the active
@@ -5057,6 +5092,7 @@ function App() {
     sub: `${dashData.avgPct}% of ${allMembers.length}`,
     color: "#1e40af",
     bg: "#eff6ff",
+    icon: "\uD83D\uDCCA",
     id: null
   }, {
     label: "Last Session",
@@ -5064,6 +5100,7 @@ function App() {
     sub: `${dashData.latest.pct}%  ${dashData.trend_dir > 0 ? "▲ up" : ""}${dashData.trend_dir < 0 ? "▼ down" : ""}${dashData.trend_dir === 0 ? "-> same" : ""}`,
     color: dashData.trend_dir >= 0 ? "#15803d" : "#b91c1c",
     bg: dashData.trend_dir >= 0 ? "#f0fdf4" : "#fef2f2",
+    icon: "\uD83D\uDDD3\uFE0F",
     id: "last"
   }, {
     label: "Best Session",
@@ -5071,6 +5108,7 @@ function App() {
     sub: dashData.best.date,
     color: "#15803d",
     bg: "#f0fdf4",
+    icon: "\uD83C\uDFC5",
     id: "best"
   }, {
     label: "Lowest Session",
@@ -5078,6 +5116,7 @@ function App() {
     sub: dashData.worst.date,
     color: "#b91c1c",
     bg: "#fef2f2",
+    icon: "\uD83D\uDCC9",
     id: "worst"
   }, {
     label: "Regular Yuvaks",
@@ -5085,6 +5124,7 @@ function App() {
     sub: `of ${allMembers.length} total`,
     color: "#15803d",
     bg: "#f0fdf4",
+    icon: "\u2705",
     id: "regular"
   }, {
     label: "Irregular",
@@ -5092,6 +5132,7 @@ function App() {
     sub: "need attention",
     color: "#92400e",
     bg: "#fffbeb",
+    icon: "\u26A0\uFE0F",
     id: "irregular"
   }, {
     label: "No Category",
@@ -5099,6 +5140,7 @@ function App() {
     sub: "not attending",
     color: "#b91c1c",
     bg: "#fef2f2",
+    icon: "\uD83D\uDEAB",
     id: "no"
   }, {
     label: ">50% Streak",
@@ -5106,36 +5148,39 @@ function App() {
     sub: "consecutive sessions",
     color: "#7c3aed",
     bg: "#f5f3ff",
+    icon: "\uD83D\uDD25",
     id: null
   }].map(k => /*#__PURE__*/React.createElement("div", {
     key: k.label,
+    className: "dash-stat-card",
     onClick: k.id ? () => setDashModal(k.id) : undefined,
     title: k.id ? "Click to view list" : undefined,
     style: {
+      "--dash-card-accent": k.color,
       background: darkMode ? "rgba(99,102,241,.1)" : k.bg,
       backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-      borderRadius: 16,
-      padding: "16px 16px",
       border: darkMode ? "1px solid var(--glass-border)" : `1px solid ${k.color}1a`,
       boxShadow: "0 2px 12px rgba(79,70,229,.05)",
-      cursor: k.id ? "pointer" : "default",
-      transition: "transform .15s ease, box-shadow .15s ease"
+      cursor: k.id ? "pointer" : "default"
     },
-    onMouseEnter: k.id ? e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(79,70,229,.15)"; } : undefined,
-    onMouseLeave: k.id ? e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 2px 12px rgba(79,70,229,.05)"; } : undefined
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: "var(--text-muted)",
-      textTransform: "uppercase",
-      letterSpacing: ".06em",
-      marginBottom: 4,
-      fontWeight: 600
-    }
-  }, k.label), /*#__PURE__*/React.createElement("div", {
+    onMouseEnter: k.id ? e => { e.currentTarget.style.transform = "translateY(-2px)"; } : undefined,
+    onMouseLeave: k.id ? e => { e.currentTarget.style.transform = "translateY(0)"; } : undefined
+  }, /*#__PURE__*/React.createElement("div", { className: "dash-stat-top" },
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "var(--text-muted)",
+        textTransform: "uppercase",
+        letterSpacing: ".06em",
+        fontWeight: 600,
+        paddingTop: 3
+      }
+    }, k.label),
+    /*#__PURE__*/React.createElement("div", { className: "dash-stat-icon" }, k.icon)
+  ), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 27,
-      fontWeight: 700,
+      fontWeight: 800,
       color: k.color,
       lineHeight: 1
     }
@@ -5151,13 +5196,13 @@ function App() {
       padding: 20,
       marginBottom: 16
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 14,
-      marginBottom: 16
-    }
-  }, "\uD83D\uDCCA Attendance Trend \u2014 Last ", dashData.trend.length, " Sessions"), (() => {
+  }, /*#__PURE__*/React.createElement("div", { className: "dash-card-head" },
+    /*#__PURE__*/React.createElement("div", { className: "dash-card-icon", style: { background: "#2563eb" } }, "\uD83D\uDCC8"),
+    /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", { className: "dash-card-title" }, "Attendance Trend"),
+      /*#__PURE__*/React.createElement("div", { className: "dash-card-sub" }, "Last ", dashData.trend.length, " sessions")
+    )
+  ), (() => {
     const data = dashData.trend;
     const W = 640, H = 230, PL = 36, PR = 46, PT = 20, PB = 34;
     const iW = W - PL - PR, iH = H - PT - PB;
@@ -5262,13 +5307,10 @@ function App() {
     style: {
       padding: 20
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 14,
-      marginBottom: 14
-    }
-  }, "\uD83C\uDF69 Category Distribution"), (() => {
+  }, /*#__PURE__*/React.createElement("div", { className: "dash-card-head", style: { marginBottom: 14 } },
+    /*#__PURE__*/React.createElement("div", { className: "dash-card-icon", style: { background: "#7c3aed" } }, "\uD83C\uDF69"),
+    /*#__PURE__*/React.createElement("div", { className: "dash-card-title" }, "Category Distribution")
+  ), (() => {
     const total = dashData.liveR + dashData.liveI + dashData.liveN || 1;
     const segs = [{
       label: "Regular",
@@ -5379,96 +5421,98 @@ function App() {
     style: {
       padding: 20
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 14,
-      marginBottom: 14
-    }
-  }, "\uD83D\uDCF6 Attendance % per Session"), (() => {
+  }, /*#__PURE__*/React.createElement("div", { className: "dash-card-head", style: { marginBottom: 14 } },
+    /*#__PURE__*/React.createElement("div", { className: "dash-card-icon", style: { background: "#0d9488" } }, "\uD83D\uDCF6"),
+    /*#__PURE__*/React.createElement("div", { className: "dash-card-title" }, "Attendance % per Session")
+  ), (() => {
+    // Fixed, always-readable bar width/gap regardless of session count \u2014
+    // instead of squeezing bars into a fixed 260px viewBox (which made bars
+    // wafer-thin or overlapping once there were more than ~10 sessions),
+    // the SVG's own viewBox width grows with the data and the chart scrolls
+    // horizontally when it doesn't fit the card, exactly like the trend
+    // chart above it. Few sessions still render at a comfortable full width.
     const data = dashData.trend;
-    const barW = Math.min(32, Math.floor(220 / data.length) - 4);
-    return /*#__PURE__*/React.createElement("svg", {
-      viewBox: `0 0 260 160`,
-      style: {
-        width: "100%",
-        display: "block"
-      }
-    }, [50, 75, 100].map(p => /*#__PURE__*/React.createElement("g", {
-      key: p
-    }, /*#__PURE__*/React.createElement("line", {
-      x1: "30",
-      y1: 140 - p * 1.1,
-      x2: "260",
-      y2: 140 - p * 1.1,
-      stroke: "#f0f0f0",
-      strokeWidth: "1"
-    }), /*#__PURE__*/React.createElement("text", {
-      x: "26",
-      y: 143 - p * 1.1,
-      textAnchor: "end",
-      fontSize: "9.5",
-      fill: "#ccc"
-    }, p, "%"))), data.map((d, i) => {
-      const bh = d.pct * 1.1;
-      const x = 34 + i * (barW + 4);
-      const fill = d.pct >= 75 ? "#15803d" : d.pct >= 50 ? "#d97706" : "#dc2626";
-      const label = d.date.split(" ")[0] + "\n" + d.date.split(" ")[1];
-      return /*#__PURE__*/React.createElement("g", {
-        key: i
-      }, /*#__PURE__*/React.createElement("rect", {
-        x: x,
-        y: 140 - bh,
-        width: barW,
-        height: bh,
-        rx: "3",
-        fill: fill,
-        opacity: "0.85"
+    const barW = 24, gap = 14, PL = 32, PR = 12, H = 168;
+    const plotW = data.length * (barW + gap);
+    const W = Math.max(240, PL + PR + plotW);
+    return /*#__PURE__*/React.createElement("div", { className: "chart-scroll" },
+      /*#__PURE__*/React.createElement("svg", {
+        viewBox: `0 0 ${W} ${H}`,
+        style: {
+          width: "100%",
+          maxWidth: W,
+          display: "block"
+        }
+      }, [50, 75, 100].map(p => /*#__PURE__*/React.createElement("g", {
+        key: p
+      }, /*#__PURE__*/React.createElement("line", {
+        x1: PL - 2,
+        y1: 140 - p * 1.1,
+        x2: W - PR,
+        y2: 140 - p * 1.1,
+        stroke: "#f0f0f0",
+        strokeWidth: "1"
       }), /*#__PURE__*/React.createElement("text", {
-        x: x + barW / 2,
-        y: 135 - bh,
-        textAnchor: "middle",
+        x: PL - 6,
+        y: 143 - p * 1.1,
+        textAnchor: "end",
         fontSize: "9.5",
-        fill: fill,
-        fontWeight: "600"
-      }, d.pct, "%"), /*#__PURE__*/React.createElement("text", {
-        x: x + barW / 2,
-        y: 150,
-        textAnchor: "middle",
-        fontSize: "9",
-        fill: "#aaa"
-      }, d.date.split(" ")[0]), /*#__PURE__*/React.createElement("text", {
-        x: x + barW / 2,
-        y: 158,
-        textAnchor: "middle",
-        fontSize: "9",
-        fill: "#aaa"
-      }, d.date.split(" ")[1]));
-    }));
+        fill: "#ccc"
+      }, p, "%"))), data.map((d, i) => {
+        const bh = d.pct * 1.1;
+        const x = PL + i * (barW + gap);
+        const fill = d.pct >= 75 ? "#15803d" : d.pct >= 50 ? "#d97706" : "#dc2626";
+        return /*#__PURE__*/React.createElement("g", {
+          key: i
+        }, /*#__PURE__*/React.createElement("rect", {
+          x: x,
+          y: 140 - bh,
+          width: barW,
+          height: bh,
+          rx: "4",
+          fill: fill,
+          opacity: "0.85"
+        }), /*#__PURE__*/React.createElement("text", {
+          x: x + barW / 2,
+          y: 135 - bh,
+          textAnchor: "middle",
+          fontSize: "9.5",
+          fill: fill,
+          fontWeight: "600"
+        }, d.pct, "%"), /*#__PURE__*/React.createElement("text", {
+          x: x + barW / 2,
+          y: 150,
+          textAnchor: "middle",
+          fontSize: "9",
+          fill: "#aaa"
+        }, d.date.split(" ")[0]), /*#__PURE__*/React.createElement("text", {
+          x: x + barW / 2,
+          y: 158,
+          textAnchor: "middle",
+          fontSize: "9",
+          fill: "#aaa"
+        }, d.date.split(" ")[1]));
+      }))
+    );
   })())), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 20,
       marginBottom: 16
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 14,
-      marginBottom: 4
-    }
-  }, "\uD83C\uDFC6 Followup Group Performance ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: "#888",
-      fontWeight: 400
-    }
-  }, "(latest session \u2014 present/total per group)"), dashData.fpPerf.length > 0 && dashData.fpPerf[0].latestDate && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11, fontWeight: 600, color: "#7c3aed", background: "#f3e8ff",
-      padding: "3px 10px", borderRadius: 20, marginLeft: 8, float: "right"
-    }
-  }, dashData.fpPerf[0].latestDate)), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", { className: "dash-card-head", style: { marginBottom: 4, alignItems: "flex-start" } },
+    /*#__PURE__*/React.createElement("div", { className: "dash-card-icon", style: { background: "#d97706" } }, "\uD83C\uDFC6"),
+    /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 180 } },
+      /*#__PURE__*/React.createElement("div", { className: "dash-card-title" }, "Followup Group Performance"),
+      /*#__PURE__*/React.createElement("div", { className: "dash-card-sub" }, "Latest session \u2014 present/total per group")
+    ),
+    dashData.fpPerf.length > 0 && dashData.fpPerf[0].latestDate && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11, fontWeight: 600, color: "#7c3aed", background: "#f3e8ff",
+        padding: "3px 10px", borderRadius: 20
+      }
+    }, dashData.fpPerf[0].latestDate)
+  ), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 14,
       display: "grid",
