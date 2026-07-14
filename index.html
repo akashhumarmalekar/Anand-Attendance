@@ -988,8 +988,8 @@ tr:hover td{background:#eff6ff !important;}
     padding:8px 10px;
     font-size:11px;
   }
-  .hist-th-name, .hist-th-followup, .hist-th-cat, .hist-th-total,
-  .hist-td-name, .hist-td-followup, .hist-td-cat, .hist-td-total{
+  .hist-th-name, .hist-th-lastatt, .hist-th-followup, .hist-th-cat, .hist-th-total,
+  .hist-td-name, .hist-td-lastatt, .hist-td-followup, .hist-td-cat, .hist-td-total{
     display:none;
   }
 }
@@ -2939,11 +2939,19 @@ function App() {
         const r = s.records.find(x => x.name === m.name);
         byDate[s.date] = (r === null || r === void 0 ? void 0 : r.status) || null;
       });
+      // Most recent date (newest-first, per allDates) on which this member
+      // was marked Present. null if they've never attended a session.
+      let lastAttended = null;
+      for (const d of allDates) {
+        if (byDate[d] === "P") { lastAttended = d; break; }
+      }
       return {
         name: m.name,
         followup: m.followup,
         cat,
         totalAtt,
+        lastAttended,
+        lastAttendedKey: lastAttended ? parseDDMMYYYYKey(lastAttended) : 0,
         byDate
       };
     }).sort((a, b) => {
@@ -2952,6 +2960,10 @@ function App() {
       if (histSort === "totalAtt") {
         av = a.totalAtt;
         bv = b.totalAtt;
+      }
+      if (histSort === "lastAttended") {
+        av = a.lastAttendedKey;
+        bv = b.lastAttendedKey;
       }
       if (histSort === "cat") {
         const o = {
@@ -7187,12 +7199,23 @@ function App() {
     },
     onClick: () => sortHist("name")
   }, "Name ", sortArrow("name")), /*#__PURE__*/React.createElement("th", {
+    className: "hist-th-lastatt",
+    style: {
+      cursor: "pointer",
+      minWidth: 120,
+      position: "sticky",
+      left: 180,
+      zIndex: 2,
+      background: "#1e3a8a"
+    },
+    onClick: () => sortHist("lastAttended")
+  }, "Last Attended ", sortArrow("lastAttended")), /*#__PURE__*/React.createElement("th", {
     className: "hist-th-followup",
     style: {
       cursor: "pointer",
       minWidth: 130,
       position: "sticky",
-      left: 180,
+      left: 300,
       zIndex: 2,
       background: "#1e3a8a"
     },
@@ -7203,7 +7226,7 @@ function App() {
       cursor: "pointer",
       width: 80,
       position: "sticky",
-      left: 310,
+      left: 430,
       zIndex: 2,
       background: "#1e3a8a"
     },
@@ -7214,7 +7237,7 @@ function App() {
       cursor: "pointer",
       width: 65,
       position: "sticky",
-      left: 390,
+      left: 510,
       zIndex: 2,
       background: "#1e3a8a"
     },
@@ -7281,6 +7304,9 @@ function App() {
     /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: "#888" } },
       /*#__PURE__*/React.createElement("span", null, r.followup),
       /*#__PURE__*/React.createElement("span", { style: { color: "#15803d", fontWeight: 600 } }, "\u2705 " + filteredDates.filter(d => r.byDate[d] === "P").length)
+    ),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#888", marginTop: 2 } },
+      "Last: " + (r.lastAttended || "Never")
     )
   ), /*#__PURE__*/React.createElement("td", {
     className: "hist-td-name",
@@ -7294,12 +7320,24 @@ function App() {
       boxShadow: "2px 0 4px rgba(0,0,0,.04)"
     }
   }, r.name), /*#__PURE__*/React.createElement("td", {
+    className: "hist-td-lastatt",
+    style: {
+      color: "#555",
+      fontSize: 12,
+      whiteSpace: "nowrap",
+      position: "sticky",
+      left: 180,
+      background: "#fff",
+      zIndex: 1,
+      boxShadow: "2px 0 4px rgba(0,0,0,.04)"
+    }
+  }, r.lastAttended || "Never"), /*#__PURE__*/React.createElement("td", {
     className: "hist-td-followup",
     style: {
       color: "#555",
       fontSize: 12,
       position: "sticky",
-      left: 180,
+      left: 300,
       background: "#fff",
       zIndex: 1,
       boxShadow: "2px 0 4px rgba(0,0,0,.04)"
@@ -7309,7 +7347,7 @@ function App() {
     style: {
       textAlign: "center",
       position: "sticky",
-      left: 310,
+      left: 430,
       background: "#fff",
       zIndex: 1,
       boxShadow: "2px 0 4px rgba(0,0,0,.04)"
@@ -7323,7 +7361,7 @@ function App() {
       fontWeight: 600,
       color: "#15803d",
       position: "sticky",
-      left: 390,
+      left: 510,
       background: "#fff",
       zIndex: 1,
       boxShadow: "2px 0 4px rgba(0,0,0,.04)"
