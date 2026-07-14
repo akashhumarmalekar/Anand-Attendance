@@ -5279,10 +5279,18 @@ function App() {
     bg: "#f5f3ff",
     icon: "\uD83D\uDD25",
     id: null
+  }, {
+    label: "Database",
+    value: allMembers.length,
+    sub: "total yuvaks",
+    color: "#0891b2",
+    bg: "#ecfeff",
+    icon: "\uD83D\uDDC3\uFE0F",
+    id: "database"
   }].map(k => /*#__PURE__*/React.createElement("div", {
     key: k.label,
     className: "dash-stat-card",
-    onClick: k.id ? () => setDashModal(k.id) : undefined,
+    onClick: k.id ? () => (k.id === "database" ? setAttModal("total") : setDashModal(k.id)) : undefined,
     title: k.id ? "Click to view list" : undefined,
     style: {
       "--dash-card-accent": k.color,
