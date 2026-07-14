@@ -1931,6 +1931,11 @@ function App() {
   const [reportDate, setReportDate] = useState(sessionDate);
   // Attendance tab stat-card drilldown modal (Present/Absent/Unmarked/Attendance/Total + time slots)
   const [attModal, setAttModal] = useState(null);
+  // Dashboard "Database" card modal — full master list grouped by followup,
+  // showing each yuvak's live category, with checkboxes to send the
+  // WhatsApp list for only selected followup leaders instead of everyone.
+  const [dbModal, setDbModal] = useState(false);
+  const [dbSelectedFPs, setDbSelectedFPs] = useState([]);
   // Merged WhatsApp menu — replaces 3 separate buttons (WhatsApp / FP-Wise
   // WA / Grouped WA) with one button that opens a small dropdown. None of
   // the underlying send logic changed — this only changes how the existing
@@ -2896,6 +2901,60 @@ function App() {
   }
   function doShareAttModal() {
     const msg = buildAttModalMsg();
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  }
+
+  // ── Dashboard "Database" card: full master list grouped by followup,
+  // each yuvak tagged with their LIVE category (Regular/Irregular/No),
+  // with per-followup checkboxes so the WhatsApp list can be sent to
+  // only the selected followup leaders instead of everyone at once.
+  const dbModalData = useMemo(() => {
+    if (!dbModal) return null;
+    const byFP = {};
+    allMembers.forEach(m => {
+      const fp = (m.followup || "").trim() || "Unassigned";
+      (byFP[fp] = byFP[fp] || []).push(m);
+    });
+    const groups = Object.keys(byFP).sort((a, b) => a === "Unassigned" ? 1 : b === "Unassigned" ? -1 : a.localeCompare(b)).map(fp => ({
+      fp,
+      members: byFP[fp].map(m => ({ ...m, category: getCategory(m.name, history) })).sort((a, b) => a.name.localeCompare(b.name))
+    }));
+    return { groups, total: allMembers.length };
+  }, [dbModal, allMembers, history, catOverrides]);
+
+  function toggleDbFP(fp) {
+    setDbSelectedFPs(prev => prev.includes(fp) ? prev.filter(f => f !== fp) : [...prev, fp]);
+  }
+  function setAllDbFPs(select) {
+    if (!dbModalData) return;
+    setDbSelectedFPs(select ? dbModalData.groups.map(g => g.fp) : []);
+  }
+  const DB_CAT_LABEL = { R: "Regular", I: "Irregular", N: "No Category" };
+  const DB_CAT_COLOR = { R: "#15803d", I: "#92400e", N: "#b91c1c" };
+  function buildDbModalMsg() {
+    if (!dbModalData) return "";
+    const groups = dbModalData.groups.filter(g => dbSelectedFPs.includes(g.fp));
+    let msg = `*|| Akshar Anand ||*\n`;
+    msg += `*Yuvak Database \u2014 ${sessionDate}*\n`;
+    msg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n`;
+    if (groups.length === 0) {
+      msg += `No followup selected.`;
+      return msg;
+    }
+    let total = 0;
+    groups.forEach(g => {
+      msg += `*${g.fp}* (${g.members.length})\n`;
+      g.members.forEach(m => {
+        msg += `\u2022 ${m.name}${m.contact ? ` \u2014 ${m.contact}` : ""} [${DB_CAT_LABEL[m.category] || "No Category"}]\n`;
+        total++;
+      });
+      msg += `\n`;
+    });
+    msg += `Total: ${total} yuvak${total !== 1 ? "s" : ""}`;
+    return msg;
+  }
+  function doShareDbModal() {
+    const msg = buildDbModalMsg();
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
   }
 
@@ -5290,7 +5349,11 @@ function App() {
   }].map(k => /*#__PURE__*/React.createElement("div", {
     key: k.label,
     className: "dash-stat-card",
-    onClick: k.id ? () => (k.id === "database" ? setAttModal("total") : setDashModal(k.id)) : undefined,
+    onClick: k.id ? () => (k.id === "database" ? (() => {
+      const fps = [...new Set(allMembers.map(m => (m.followup || "").trim() || "Unassigned"))].sort((a, b) => a === "Unassigned" ? 1 : b === "Unassigned" ? -1 : a.localeCompare(b));
+      setDbSelectedFPs(fps);
+      setDbModal(true);
+    })() : setDashModal(k.id)) : undefined,
     title: k.id ? "Click to view list" : undefined,
     style: {
       "--dash-card-accent": k.color,
@@ -8658,6 +8721,74 @@ function App() {
   return /*#__PURE__*/React.createElement("div", {
     className: "modal-bg",
     onClick: () => setAttModal(null)
+  }, modalCard);
+})() : null), (dbModalData ? (() => {
+  const d = dbModalData;
+  const closeDb = () => { setDbModal(false); };
+  const titleBlock = /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 15 } }, "Database \u2014 All Yuvaks"),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, opacity: .85, marginTop: 2 } }, d.total, " yuvak", d.total !== 1 ? "s" : "", " \u00B7 ", dbSelectedFPs.length, " of ", d.groups.length, " followups selected")
+  );
+  const closeBtn = /*#__PURE__*/React.createElement("button", {
+    onClick: closeDb,
+    style: { background: "rgba(255,255,255,.2)", border: "none", borderRadius: 8, color: "#fff", fontSize: 16, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }
+  }, "\u2715");
+  const header = /*#__PURE__*/React.createElement("div", {
+    style: { background: "#0891b2", borderRadius: "16px 16px 0 0", padding: "16px 20px", color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0 }
+  }, titleBlock, closeBtn);
+  const selectRow = /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 8, padding: "10px 20px 0", fontSize: 12 }
+  },
+    /*#__PURE__*/React.createElement("button", { className: "btn btn-gray", style: { padding: "4px 10px", fontSize: 12 }, onClick: () => setAllDbFPs(true) }, "Select All"),
+    /*#__PURE__*/React.createElement("button", { className: "btn btn-gray", style: { padding: "4px 10px", fontSize: 12 }, onClick: () => setAllDbFPs(false) }, "Select None")
+  );
+  const shareBtn = /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-wa",
+    onClick: doShareDbModal,
+    disabled: dbSelectedFPs.length === 0,
+    style: { width: "100%", justifyContent: "center", gap: 6, opacity: dbSelectedFPs.length === 0 ? .5 : 1 }
+  }, "Share selected followups (WhatsApp)");
+  const actionRow = /*#__PURE__*/React.createElement("div", { style: { padding: "10px 20px 12px", display: "flex", flexDirection: "column", gap: 8 } }, selectRow, shareBtn);
+  let listBody;
+  if (d.groups.length === 0) {
+    listBody = /*#__PURE__*/React.createElement("div", {
+      style: { padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }
+    }, "No yuvaks in the database.");
+  } else {
+    const groupEls = d.groups.map(g => {
+      const checked = dbSelectedFPs.includes(g.fp);
+      const checkbox = /*#__PURE__*/React.createElement("input", {
+        type: "checkbox",
+        checked: checked,
+        onChange: () => toggleDbFP(g.fp),
+        style: { marginRight: 8, cursor: "pointer" }
+      });
+      const fpHeader = /*#__PURE__*/React.createElement("label", {
+        style: { display: "flex", alignItems: "center", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", background: darkMode ? "rgba(148,163,184,.1)" : "#f8fafc", padding: "6px 20px", borderTop: darkMode ? "1px solid var(--glass-border)" : "1px solid #f1f5f9", borderBottom: darkMode ? "1px solid var(--glass-border)" : "1px solid #f1f5f9" }
+      }, checkbox, g.fp, " (", g.members.length, ")");
+      const memberEls = g.members.map((m, i) => {
+        const numSpan = /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "var(--text-muted)", width: 18, flexShrink: 0 } }, i + 1, ".");
+        const nameSpan = /*#__PURE__*/React.createElement("span", { style: { fontSize: 14 } }, m.name);
+        const catSpan = /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 10, fontWeight: 700, color: DB_CAT_COLOR[m.category] || "#888", background: darkMode ? "rgba(148,163,184,.12)" : "#f1f5f9", borderRadius: 5, padding: "2px 7px", marginLeft: 8 }
+        }, DB_CAT_LABEL[m.category] || "No Category");
+        const contactSpan = m.contact ? /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" } }, m.contact) : null;
+        return /*#__PURE__*/React.createElement("div", {
+          key: m.name, className: "row-hover",
+          style: { display: "flex", alignItems: "center", gap: 6, padding: "8px 20px 8px 36px", opacity: checked ? 1 : .45 }
+        }, numSpan, nameSpan, catSpan, contactSpan);
+      });
+      return /*#__PURE__*/React.createElement("div", { key: g.fp, style: { marginBottom: 6 } }, fpHeader, memberEls);
+    });
+    listBody = /*#__PURE__*/React.createElement("div", { style: { padding: "4px 0 12px" } }, groupEls);
+  }
+  const modalCard = /*#__PURE__*/React.createElement("div", {
+    style: { background: darkMode ? "#1e293b" : "#fff", borderRadius: 16, maxWidth: 460, width: "92%", maxHeight: "82vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,.25)", padding: 0 },
+    onClick: e => e.stopPropagation()
+  }, header, actionRow, listBody);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "modal-bg",
+    onClick: closeDb
   }, modalCard);
 })() : null), showGroupedWAModal && /*#__PURE__*/React.createElement("div", {
     className: "modal-bg",
