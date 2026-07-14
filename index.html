@@ -4718,11 +4718,24 @@ function App() {
         //                     MONTH-first, unlike every other format here
         //   "6/1/2026"     -> same, 4-digit year variant, handled for
         //                     safety even though not seen in practice yet
+        //   "2026/07/06"   -> ISO-order text, YYYY/MM/DD (seen from
+        //                     Google Sheets exports / re-saved files) —
+        //                     year-first, so distinguished from M/D/YY
+        //                     above by the leading 4-digit group
+        //   "2026-07-06"   -> same, ISO-order with dashes instead of
+        //                     slashes
         function normalizeDateHeader(h) {
           if (typeof h === "number") return excelSerialToDDMMYYYY(h);
           var s = String(h).trim();
           var m = s.match(/^(\d{2})-(\d{2})-(\d{4})(\d*)$/); // DD-MM-YYYY plus any stray trailing digits
           if (m) return m[1] + "-" + m[2] + "-" + m[3];
+          var mIso = s.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/); // YYYY/MM/DD or YYYY-MM-DD
+          if (mIso) {
+            var yrI = parseInt(mIso[1], 10), moI = parseInt(mIso[2], 10), daI = parseInt(mIso[3], 10);
+            if (moI >= 1 && moI <= 12 && daI >= 1 && daI <= 31) {
+              return String(daI).padStart(2, "0") + "-" + String(moI).padStart(2, "0") + "-" + yrI;
+            }
+          }
           var m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/); // M/D/YY or M/D/YYYY
           if (m2) {
             var mo = parseInt(m2[1], 10), da = parseInt(m2[2], 10), yr = parseInt(m2[3], 10);
