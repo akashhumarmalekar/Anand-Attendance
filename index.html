@@ -1925,6 +1925,10 @@ function App() {
   const [dashModal, setDashModal] = useState(null);
   // Report tab stat-card drilldown modal (Regular/Irregular/No Present/Absent + Grand totals)
   const [reportModal, setReportModal] = useState(null);
+  // Report tab date selector — lets the user view/download the report for
+  // any past submitted session, not just the live session in progress.
+  // Defaults to sessionDate (today's live session).
+  const [reportDate, setReportDate] = useState(sessionDate);
   // Attendance tab stat-card drilldown modal (Present/Absent/Unmarked/Attendance/Total + time slots)
   const [attModal, setAttModal] = useState(null);
   // Merged WhatsApp menu — replaces 3 separate buttons (WhatsApp / FP-Wise
@@ -2492,7 +2496,7 @@ function App() {
       restoreStyles();
       canvas.toBlob(function(blob) {
         if (!blob) { toast_("Could not generate image", "error"); return; }
-        const fname = "Shreeji_Report_" + sessionDate.replace(/ /g,"_") + ".png";
+        const fname = "Shreeji_Report_" + reportDate.replace(/ /g,"_") + ".png";
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], fname, { type: "image/png" })] })) {
           const file = new File([blob], fname, { type: "image/png" });
           navigator.share({ title: "Shreeji Attendance Report", files: [file] })
@@ -2579,6 +2583,41 @@ function App() {
     }
   }
 
+  // ── Report tab: date-scoped data source ──────────────────────────────────
+  // Lets the Report tab show/share/download a report for ANY past
+  // submitted session, not just the live one in progress. If a historic
+  // record exists for reportDate, that's the source of truth (matches the
+  // Historic tab exactly); otherwise (only possible when reportDate ===
+  // sessionDate, i.e. today hasn't been submitted yet) it falls back to
+  // the live in-progress `attendance` state so the report stays in sync
+  // with marks as they're made.
+  const reportHistSession = useMemo(() =>
+    history.find(s => s.date === reportDate) || null,
+    [history, reportDate]
+  );
+  const reportIsLive = !reportHistSession;
+  const reportAttendance = useMemo(() => {
+    if (!reportHistSession) return attendance;
+    const map = {};
+    reportHistSession.records.forEach(r => { map[r.name] = { status: r.status, time: r.time || "" }; });
+    return map;
+  }, [reportHistSession, attendance]);
+  // Dates selectable in the Report tab dropdown: every submitted session
+  // (newest first) plus sessionDate itself (covers "today, not yet
+  // submitted" — it won't already be in history in that case).
+  const reportDateOptions = useMemo(() => {
+    const dates = [...new Set(history.map(s => s.date))];
+    if (!dates.includes(sessionDate)) dates.unshift(sessionDate);
+    return dates.sort((a, b) => parseDDMMYYYYKey(b) - parseDDMMYYYYKey(a));
+  }, [history, sessionDate]);
+  // Keep the Report tab following "today" by default — if the live
+  // session date changes (e.g. app opened on a new day, or a session
+  // just got submitted), snap reportDate back to it unless it's no
+  // longer a valid option.
+  React.useEffect(() => {
+    setReportDate(d => reportDateOptions.includes(d) ? d : sessionDate);
+  }, [sessionDate]);
+
   // ── Attendance Report ──────────────────────────────────────────────────────
   const reportData = useMemo(() => {
     const fGroups = [...new Set(allMembers.map(m => m.followup))].sort();
@@ -2593,7 +2632,7 @@ function App() {
       members.forEach(m => {
         var _attendance$m$name8;
         const cat = getCategory(m.name, history);
-        const s = (_attendance$m$name8 = attendance[m.name]) === null || _attendance$m$name8 === void 0 ? void 0 : _attendance$m$name8.status;
+        const s = (_attendance$m$name8 = reportAttendance[m.name]) === null || _attendance$m$name8 === void 0 ? void 0 : _attendance$m$name8.status;
         if (s === "P") {
           if (cat === "R") RP++;else if (cat === "I") IP++;else NP++;
         } else {
@@ -2630,9 +2669,7 @@ function App() {
       grandP: totRP + totIP + totNP,
       grandA: totRA + totIA + totNA
     };
-  }, [history, attendance, allMembers]);
-
-  // ── Report tab card drilldown ────────────────────────────────────────────
+  }, [history, reportAttendance, allMembers]);
   // Builds the followup-grouped member list shown when a Report summary card
   // (Regular/Irregular/No Present, Regular/Irregular/No Absent, Grand
   // Present/Absent) is clicked. Filtering exactly mirrors reportData's own
@@ -2727,7 +2764,7 @@ function App() {
     const matches = allMembers.filter(m => {
       const cat = getCategory(m.name, history);
       if (meta.cat !== "ALL" && cat !== meta.cat) return false;
-      const s = attendance[m.name]?.status;
+      const s = reportAttendance[m.name]?.status;
       return meta.status === "P" ? s === "P" : s !== "P";
     });
     const byFP = {};
@@ -2740,12 +2777,12 @@ function App() {
       members: byFP[fp].sort((a, b) => a.name.localeCompare(b.name))
     }));
     return { ...meta, groups, total: matches.length };
-  }, [reportModal, allMembers, history, attendance, prevSessionAbsentNow, regBecomingIrr]);
+  }, [reportModal, allMembers, history, reportAttendance, prevSessionAbsentNow, regBecomingIrr]);
 
   function buildReportModalMsg() {
     if (!reportModalData) return "";
     let msg = `*|| Akshar Anand ||*\n`;
-    msg += `*${reportModalData.title} \u2014 ${sessionDate}*\n`;
+    msg += `*${reportModalData.title} \u2014 ${reportDate}*\n`;
     msg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n`;
     reportModalData.groups.forEach(g => {
       msg += `*${g.fp}* (${g.members.length})\n`;
@@ -3472,6 +3509,42 @@ function App() {
   // contact numbers — built from the SAME regularAbsent list already
   // powering the Attendance panel's "Regular Absent" subtab, so this is
   // always in sync with what's on screen, not a separate recomputation.
+  // Regular-category members absent on the currently selected Report tab
+  // date (reportDate) — mirrors `regularAbsent` above but sourced from
+  // reportAttendance so it respects whichever date is picked in the
+  // Report tab, instead of always being "right now".
+  const reportRegularAbsent = useMemo(() => allMembers.filter(m => {
+    const a = reportAttendance[m.name];
+    return getCategory(m.name, history) === "R" && (!a || a.status !== "P");
+  }).sort((a, b) => a.name.localeCompare(b.name)), [allMembers, history, reportAttendance]);
+  function buildReportRegularAbsentByFPMsg() {
+    let msg = `*|| Akshar Anand ||*\n`;
+    msg += `*Regular Yuvaks Absent — ${reportDate}*\n`;
+    msg += `━━━━━━━━━━━━━━━━━\n\n`;
+    if (reportRegularAbsent.length === 0) {
+      msg += `All Regular yuvaks were present!`;
+      return msg;
+    }
+    const byFP = {};
+    reportRegularAbsent.forEach(m => {
+      const fp = m.followup || "Unassigned";
+      (byFP[fp] = byFP[fp] || []).push(m);
+    });
+    Object.keys(byFP).sort().forEach(fp => {
+      msg += `*${fp}* (${byFP[fp].length})\n`;
+      byFP[fp].forEach(m => {
+        msg += `• ${m.name}${m.contact ? ` — ${m.contact}` : ""}\n`;
+      });
+      msg += `\n`;
+    });
+    msg += `Total: ${reportRegularAbsent.length} Regular yuvak${reportRegularAbsent.length !== 1 ? "s" : ""} absent`;
+    return msg;
+  }
+  function doShareReportRegularAbsentByFP() {
+    const msg = buildReportRegularAbsentByFPMsg();
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  }
+
   function buildRegularAbsentByFPMsg() {
     let msg = `*|| Akshar Anand ||*\n`;
     msg += `*Regular Yuvaks Absent — ${sessionDate}*\n`;
@@ -6733,9 +6806,19 @@ function App() {
         )
       )
 ), tab === "report" && /*#__PURE__*/React.createElement(React.Fragment, null,
-  /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap",marginBottom:10}},
-    /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:doShareRegularAbsentByFP,style:{gap:6}}, "\uD83D\uDD34 Regular Absent by Followup (WhatsApp)"),
-    /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:shareReportAsImage,style:{gap:6}}, "\uD83D\uDCF8 Share as Image (WhatsApp)")
+  /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}},
+    /*#__PURE__*/React.createElement("label", {style:{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:"#374151"}},
+      "\uD83D\uDCC5 Report for:",
+      /*#__PURE__*/React.createElement("select", {
+        value: reportDate,
+        onChange: e => setReportDate(e.target.value),
+        style: {fontSize:13,padding:"7px 10px",borderRadius:8,border:"1.5px solid #cbd5e1",background:"#fff",cursor:"pointer",fontWeight:600,color:"#1e3a8a"}
+      }, reportDateOptions.map(d => /*#__PURE__*/React.createElement("option", {key:d, value:d}, d === sessionDate && reportIsLive ? `${d} (Today \u00B7 Live)` : d)))
+    ),
+    /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:8,flexWrap:"wrap"}},
+      /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:doShareReportRegularAbsentByFP,style:{gap:6}}, "\uD83D\uDD34 Regular Absent by Followup (WhatsApp)"),
+      /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:shareReportAsImage,style:{gap:6}}, "\uD83D\uDCF8 Share as Image (WhatsApp)")
+    )
   ),
   /*#__PURE__*/React.createElement("div", {
       style: {
@@ -6800,7 +6883,7 @@ function App() {
       color: c
     }
   }, v)))),
-  /*#__PURE__*/React.createElement("div", {
+  reportIsLive && /*#__PURE__*/React.createElement("div", {
     className: "stat-card",
     onClick: () => setReportModal("PLA"),
     title: "Click to view list, grouped by category and followup",
@@ -6824,7 +6907,7 @@ function App() {
   /*#__PURE__*/React.createElement("div", {ref:reportPanelRef, style:{background:"#fff",borderRadius:12,border:"1px solid #e5e5e5",overflow:"hidden",display:"inline-block",width:"max-content"}},
   /*#__PURE__*/React.createElement("div", {style:{background:"#1e3a8a",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}},
     /*#__PURE__*/React.createElement("div", {style:{color:"#fff",fontWeight:700,fontSize:14}}, "\uD83D\uDE4F \u2016 Akshar Anand \u2016 \u2014 Follow-up Report"),
-    /*#__PURE__*/React.createElement("div", {style:{color:"#aaa",fontSize:12}}, sessionDate, " \u00B7 ", sabhaType)
+    /*#__PURE__*/React.createElement("div", {style:{color:"#aaa",fontSize:12}}, reportDate, " \u00B7 ", (reportHistSession && reportHistSession.sabhaType) || sabhaType, reportIsLive ? " \u00B7 Live" : "")
   ),
   /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:0,borderBottom:"1px solid #eee"}},
     [["Total Present", reportData.grandP, "#15803d","#f0fdf4"], ["Total Absent", reportData.grandA, "#b91c1c","#fef2f2"], ["Attendance %", (reportData.grandP+reportData.grandA)>0?Math.round(reportData.grandP/(reportData.grandP+reportData.grandA)*100)+"%" : "0%", "#1e40af","#eff6ff"], ["Total Members", allMembers.length, "#374151","#f9fafb"]].map(function([l,v,c,bg],i){
