@@ -2469,6 +2469,10 @@ function App() {
 
   // ── Share Report as Image on WhatsApp ──────────────────────────────────────
   const reportPanelRef = useRef(null);
+  // Ref for the followup ranking leaderboard card (rendered further down in
+  // the Report tab) — captured with html2canvas for the "Share Ranking as
+  // Image" WhatsApp button, same technique as reportPanelRef below.
+  const fpRankRef = useRef(null);
   // Ref for the table's own horizontal-scroll wrapper (the table has
   // minWidth:700 and normally scrolls sideways on a narrow phone screen).
   const reportTableWrapRef = useRef(null);
@@ -2707,6 +2711,50 @@ function App() {
   function doShareFpRanking() {
     const msg = buildFpRankingMsg();
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  }
+  // ── Followup Ranking card data (for the visual leaderboard + image share) ──
+  // Same rows as buildFpRankingMsg (present/total & R/I/N for reportDate),
+  // plus a 6-point sparkline of this group's attendance % leading up to
+  // reportDate, so the on-screen card can look like the Dashboard's
+  // "Followup Group Performance" cards.
+  const fpRankingImgData = useMemo(() => {
+    const cutoffHist = reportIsLive
+      ? history
+      : (() => {
+          const idx = history.findIndex(s => s.date === reportDate);
+          return idx === -1 ? history : history.slice(0, idx + 1);
+        })();
+    const spark6 = cutoffHist.slice(-6);
+    return reportData.rows
+      .map(r => {
+        const names = allMembers.filter(m => m.followup === r.fp).map(m => m.name);
+        const pct = r.members > 0 ? Math.round(r.totalP / r.members * 100) : 0;
+        const sparkline = spark6.map(s => {
+          const p = s.records.filter(rec => names.includes(rec.name) && rec.status === "P").length;
+          return r.members > 0 ? Math.round(p / r.members * 100) : 0;
+        });
+        return { ...r, pct, sparkline };
+      })
+      .sort((a, b) => b.pct - a.pct || a.fp.localeCompare(b.fp));
+  }, [reportData, allMembers, history, reportDate, reportIsLive]);
+  function shareFpRankingAsImage() {
+    const el = fpRankRef.current;
+    if (!el) { toast_("Ranking card not found", "error"); return; }
+    toast_("Generating ranking image\u2026");
+    html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#f5f4f0" }).then(function(canvas) {
+      canvas.toBlob(function(blob) {
+        if (!blob) { toast_("Could not generate image", "error"); return; }
+        const fname = "Shreeji_Ranking_" + reportDate.replace(/ /g,"_") + ".png";
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], fname, { type: "image/png" })] })) {
+          const file = new File([blob], fname, { type: "image/png" });
+          navigator.share({ title: "Shreeji Followup Ranking", files: [file] })
+            .then(function(){ toast_("Shared successfully!"); })
+            .catch(function(){ fallbackDownload(blob, fname); });
+        } else {
+          fallbackDownload(blob, fname);
+        }
+      }, "image/png");
+    }).catch(function(e) { toast_("Image generation failed", "error"); });
   }
   // Builds the followup-grouped member list shown when a Report summary card
   // (Regular/Irregular/No Present, Regular/Irregular/No Absent, Grand
@@ -6934,6 +6982,7 @@ function App() {
     ),
     /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:8,flexWrap:"wrap"}},
       /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:doShareFpRanking,style:{gap:6}}, "\uD83C\uDFC6 Followup Ranking (WhatsApp)"),
+      /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:shareFpRankingAsImage,style:{gap:6}}, "\uD83D\uDCF8 Share Ranking as Image (WhatsApp)"),
       /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:doShareReportRegularAbsentByFP,style:{gap:6}}, "\uD83D\uDD34 Regular Absent by Followup (WhatsApp)"),
       /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:shareReportAsImage,style:{gap:6}}, "\uD83D\uDCF8 Share as Image (WhatsApp)")
     )
@@ -7020,6 +7069,53 @@ function App() {
       )
     ),
     /*#__PURE__*/React.createElement("div", { style: { fontSize: 24, fontWeight: 800, color: "#ea580c" } }, prevSessionAbsentNow.length)
+  ),
+  /*#__PURE__*/React.createElement("div", {
+    ref: fpRankRef,
+    style: {
+      background: "#fff", borderRadius: 12, border: "1px solid #e5e5e5",
+      padding: 18, marginBottom: 18
+    }
+  },
+    /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 14, marginBottom: 4, color: "#1e3a8a" } }, "\uD83C\uDFC6 Followup Ranking \u2014 " + reportDate),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#888", marginBottom: 14 } }, "Ranked by attendance % \u00B7 use \u201CShare Ranking as Image\u201D above to send on WhatsApp"),
+    fpRankingImgData.map(r => {
+      const tone = r.pct >= 75 ? "#15803d" : r.pct >= 50 ? "#d97706" : "#dc2626";
+      const spark = r.sparkline.length > 1 ? r.sparkline : [r.pct, r.pct];
+      const sMax = Math.max(...spark, 1), sMin = Math.min(...spark, 0);
+      const sRange = Math.max(sMax - sMin, 1);
+      const pts = spark.map((v, i) => {
+        const x = (i / (spark.length - 1)) * 56;
+        const y = 22 - ((v - sMin) / sRange) * 20;
+        return `${x},${y}`;
+      }).join(" ");
+      const lastPt = spark.length > 1 ? [56, 22 - ((spark[spark.length - 1] - sMin) / sRange) * 20] : [56, 11];
+      return /*#__PURE__*/React.createElement("div", { key: r.fp, style: { marginBottom: 16 } },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13.5 } }, r.fp),
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#999" } }, `${r.totalP}/${r.members}`),
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, fontWeight: 700, color: tone } }, `${r.pct}%`),
+            /*#__PURE__*/React.createElement("svg", { width: 56, height: 22, style: { flexShrink: 0 } },
+              /*#__PURE__*/React.createElement("polyline", { points: pts, fill: "none", stroke: tone, strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round" }),
+              /*#__PURE__*/React.createElement("circle", { cx: lastPt[0], cy: lastPt[1], r: 2.2, fill: tone })
+            )
+          )
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 5, marginBottom: 8 } },
+          /*#__PURE__*/React.createElement("span", { className: "badge badge-R", style: { fontSize: 10, padding: "1px 7px" } }, (r.RP + r.RA) + "R"),
+          /*#__PURE__*/React.createElement("span", { className: "badge badge-I", style: { fontSize: 10, padding: "1px 7px" } }, (r.IP + r.IA) + "I"),
+          /*#__PURE__*/React.createElement("span", { className: "badge badge-N", style: { fontSize: 10, padding: "1px 7px" } }, (r.NP + r.NA) + "N")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { background: "#f3f4f6", borderRadius: 6, height: 7, overflow: "hidden" } },
+          /*#__PURE__*/React.createElement("div", { style: { height: "100%", width: `${r.pct}%`, borderRadius: 6, background: tone, transition: "width .3s" } })
+        )
+      );
+    }),
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 4, fontSize: 11, color: "#888", flexWrap: "wrap" } },
+      [["#15803d", ">=75% (Good)"], ["#d97706", "50-74% (Fair)"], ["#dc2626", "<50% (Needs attention)"]].map(([c, l]) => /*#__PURE__*/React.createElement("span", { key: l, style: { display: "flex", alignItems: "center", gap: 4 } },
+        /*#__PURE__*/React.createElement("span", { style: { width: 10, height: 10, borderRadius: 2, background: c, display: "inline-block" } }), l))
+    )
   ),
   /*#__PURE__*/React.createElement("div", { style: { overflowX: "auto" } },
   /*#__PURE__*/React.createElement("div", {ref:reportPanelRef, style:{background:"#fff",borderRadius:12,border:"1px solid #e5e5e5",overflow:"hidden",display:"inline-block",width:"max-content"}},
