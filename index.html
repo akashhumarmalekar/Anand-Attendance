@@ -2675,6 +2675,39 @@ function App() {
       grandA: totRA + totIA + totNA
     };
   }, [history, reportAttendance, allMembers]);
+  // ── Followup Ranking (WhatsApp) ──────────────────────────────────────────
+  // Builds a leaderboard-style WhatsApp message for the Report tab: each
+  // followup group ranked by attendance % (highest first), with its
+  // present/total count and a Regular/Irregular/No breakdown — mirroring
+  // the "Followup Group Performance" cards on the Dashboard — followed by
+  // grand totals of Regular/Irregular/No Present & Absent at the bottom.
+  function buildFpRankingMsg() {
+    const rows = reportData.rows
+      .map(r => ({ ...r, pct: r.members > 0 ? Math.round(r.totalP / r.members * 100) : 0 }))
+      .sort((a, b) => b.pct - a.pct || a.fp.localeCompare(b.fp));
+    let msg = `*\uD83D\uDE4F || Akshar Anand || \u2014 Attendance Report*\n`;
+    msg += `*Followup Ranking \u2014 ${reportDate}*\n`;
+    msg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n`;
+    rows.forEach((r, i) => {
+      const tone = r.pct >= 75 ? "\uD83D\uDFE2" : r.pct >= 50 ? "\uD83D\uDFE0" : "\uD83D\uDD34";
+      msg += `${i + 1}. *${r.fp}* \u2014 ${r.totalP}/${r.members} (${r.pct}%) ${tone}\n`;
+      msg += `    \uD83D\uDFE2${r.RP + r.RA}R  \uD83D\uDFE0${r.IP + r.IA}I  \uD83D\uDD34${r.NP + r.NA}N\n\n`;
+    });
+    msg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n`;
+    msg += `*Totals*\n`;
+    msg += `\uD83D\uDFE2 Regular: ${reportData.totRP} Present / ${reportData.totRA} Absent\n`;
+    msg += `\uD83D\uDFE0 Irregular: ${reportData.totIP} Present / ${reportData.totIA} Absent\n`;
+    msg += `\uD83D\uDD34 No: ${reportData.totNP} Present / ${reportData.totNA} Absent\n`;
+    msg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n`;
+    const gTot = reportData.grandP + reportData.grandA;
+    const gPct = gTot > 0 ? Math.round(reportData.grandP / gTot * 100) : 0;
+    msg += `*Grand Total: ${reportData.grandP}P / ${reportData.grandA}A \u2014 ${gPct}%*`;
+    return msg;
+  }
+  function doShareFpRanking() {
+    const msg = buildFpRankingMsg();
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  }
   // Builds the followup-grouped member list shown when a Report summary card
   // (Regular/Irregular/No Present, Regular/Irregular/No Absent, Grand
   // Present/Absent) is clicked. Filtering exactly mirrors reportData's own
@@ -6900,6 +6933,7 @@ function App() {
       }, reportDateOptions.map(d => /*#__PURE__*/React.createElement("option", {key:d, value:d}, d === sessionDate && reportIsLive ? `${d} (Today \u00B7 Live)` : d)))
     ),
     /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:8,flexWrap:"wrap"}},
+      /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:doShareFpRanking,style:{gap:6}}, "\uD83C\uDFC6 Followup Ranking (WhatsApp)"),
       /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:doShareReportRegularAbsentByFP,style:{gap:6}}, "\uD83D\uDD34 Regular Absent by Followup (WhatsApp)"),
       /*#__PURE__*/React.createElement("button", {className:"btn btn-wa",onClick:shareReportAsImage,style:{gap:6}}, "\uD83D\uDCF8 Share as Image (WhatsApp)")
     )
