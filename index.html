@@ -3260,7 +3260,8 @@ function App() {
       contact: m.contact || "",
       reference: m.reference || "",
       address: m.address || "",
-      followup: fpOverrides[m.name] || m.followup
+      followup: fpOverrides[m.name] || m.followup,
+      cat: catOverrides[m.name] || "auto"
     });
   }
   function doSaveEdit() {
@@ -3287,6 +3288,18 @@ function App() {
       delete newOv[newName];
     }
     if (namChanged) delete newOv[oldName];
+
+    // Update category override (manual pin takes priority over auto-calculated category)
+    const newCat = {
+      ...catOverrides
+    };
+    if (editForm.cat === "auto") delete newCat[newName];else newCat[newName] = editForm.cat;
+    if (namChanged) {
+      delete newCat[oldName];
+      if (editForm.cat !== "auto") newCat[newName] = editForm.cat;
+    }
+    setCatOverrides(newCat);
+    saveCatOv(newCat);
 
     // Update extra members if applicable
     if (editTarget.isExtra) {
@@ -8561,7 +8574,24 @@ function App() {
     }))
   }, allFollowups.map(fp => /*#__PURE__*/React.createElement("option", {
     key: fp
-  }, fp)))), editTarget.isExtra && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+  }, fp)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "Category"), /*#__PURE__*/React.createElement("select", {
+    className: "form-input",
+    value: editForm.cat,
+    onChange: e => setEditForm(f => ({
+      ...f,
+      cat: e.target.value
+    }))
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "auto"
+  }, "Auto (calculated)"), /*#__PURE__*/React.createElement("option", {
+    value: "R"
+  }, "Regular"), /*#__PURE__*/React.createElement("option", {
+    value: "I"
+  }, "Irregular"), /*#__PURE__*/React.createElement("option", {
+    value: "N"
+  }, "No Category"))), editTarget.isExtra && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "form-label"
   }, "Date of Birth"), /*#__PURE__*/React.createElement("input", {
     className: "form-input",
