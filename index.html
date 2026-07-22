@@ -7796,6 +7796,34 @@ function App() {
       color: "#fff"
     }
   }, /*#__PURE__*/React.createElement("td", {
+    className: "hist-td-merged-mobile",
+    style: {
+      position: "sticky",
+      left: 0,
+      background: bg,
+      zIndex: 1,
+      padding: "7px 10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+      fontWeight: 600,
+      fontSize: 11,
+      whiteSpace: "nowrap"
+    }
+  }, label, /*#__PURE__*/React.createElement("span", {
+    style: { color, fontWeight: 700, fontSize: 13 }
+  }, cat === null ? filteredDates.reduce((s, d) => {
+    const sess = prevHistory.find(x => x.date === d);
+    return s + (sess ? sess.records.filter(r => r.status === "P").length : 0);
+  }, 0) : filteredDates.reduce((s, d) => {
+    const sess = prevHistory.find(x => x.date === d);
+    return s + (sess ? sess.records.filter(r => r.status === "P" && getCategory(r.name, prevHistory) === cat).length : 0);
+  }, 0)))), /*#__PURE__*/React.createElement("td", {
+    className: "hist-td-name",
     style: {
       fontWeight: 600,
       fontSize: 11,
@@ -7807,6 +7835,7 @@ function App() {
       padding: "7px 10px"
     }
   }, label), /*#__PURE__*/React.createElement("td", {
+    className: "hist-td-lastatt",
     style: {
       position: "sticky",
       left: 180,
@@ -7814,19 +7843,29 @@ function App() {
       zIndex: 1
     }
   }), /*#__PURE__*/React.createElement("td", {
+    className: "hist-td-followup",
     style: {
       position: "sticky",
-      left: 310,
+      left: 300,
       background: bg,
       zIndex: 1
     }
   }), /*#__PURE__*/React.createElement("td", {
+    className: "hist-td-cat",
+    style: {
+      position: "sticky",
+      left: 430,
+      background: bg,
+      zIndex: 1
+    }
+  }), /*#__PURE__*/React.createElement("td", {
+    className: "hist-td-total",
     style: {
       textAlign: "center",
       fontWeight: 700,
       color,
       position: "sticky",
-      left: 390,
+      left: 510,
       background: bg,
       zIndex: 1
     }
