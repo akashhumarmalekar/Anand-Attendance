@@ -7074,7 +7074,7 @@ function App() {
     ref: fpRankRef,
     style: {
       background: "#fff", borderRadius: 12, border: "1px solid #e5e5e5",
-      padding: 18, marginBottom: 18
+      padding: 18, marginBottom: 18, maxWidth: 420, width: "100%", boxSizing: "border-box"
     }
   },
     /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 14, marginBottom: 4, color: "#1e3a8a" } }, "\uD83C\uDFC6 Followup Ranking \u2014 " + reportDate),
@@ -7085,20 +7085,20 @@ function App() {
       const sMax = Math.max(...spark, 1), sMin = Math.min(...spark, 0);
       const sRange = Math.max(sMax - sMin, 1);
       const pts = spark.map((v, i) => {
-        const x = (i / (spark.length - 1)) * 56;
-        const y = 22 - ((v - sMin) / sRange) * 20;
+        const x = (i / (spark.length - 1)) * 40;
+        const y = 18 - ((v - sMin) / sRange) * 16;
         return `${x},${y}`;
       }).join(" ");
-      const lastPt = spark.length > 1 ? [56, 22 - ((spark[spark.length - 1] - sMin) / sRange) * 20] : [56, 11];
+      const lastPt = spark.length > 1 ? [40, 18 - ((spark[spark.length - 1] - sMin) / sRange) * 16] : [40, 9];
       return /*#__PURE__*/React.createElement("div", { key: r.fp, style: { marginBottom: 16 } },
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 } },
-          /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13.5 } }, r.fp),
-          /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13.5, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, r.fp),
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 7, flexShrink: 0 } },
             /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#999" } }, `${r.totalP}/${r.members}`),
             /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, fontWeight: 700, color: tone } }, `${r.pct}%`),
-            /*#__PURE__*/React.createElement("svg", { width: 56, height: 22, style: { flexShrink: 0 } },
+            /*#__PURE__*/React.createElement("svg", { width: 40, height: 18, style: { flexShrink: 0 } },
               /*#__PURE__*/React.createElement("polyline", { points: pts, fill: "none", stroke: tone, strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round" }),
-              /*#__PURE__*/React.createElement("circle", { cx: lastPt[0], cy: lastPt[1], r: 2.2, fill: tone })
+              /*#__PURE__*/React.createElement("circle", { cx: lastPt[0], cy: lastPt[1], r: 2, fill: tone })
             )
           )
         ),
@@ -7112,9 +7112,25 @@ function App() {
         )
       );
     }),
-    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 4, fontSize: 11, color: "#888", flexWrap: "wrap" } },
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 4, marginBottom: 16, fontSize: 11, color: "#888", flexWrap: "wrap" } },
       [["#15803d", ">=75% (Good)"], ["#d97706", "50-74% (Fair)"], ["#dc2626", "<50% (Needs attention)"]].map(([c, l]) => /*#__PURE__*/React.createElement("span", { key: l, style: { display: "flex", alignItems: "center", gap: 4 } },
         /*#__PURE__*/React.createElement("span", { style: { width: 10, height: 10, borderRadius: 2, background: c, display: "inline-block" } }), l))
+    ),
+    /*#__PURE__*/React.createElement("div", { style: { borderTop: "1px solid #eee", paddingTop: 12 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 12.5, marginBottom: 8, color: "#374151" } }, "Totals"),
+      [["#15803d", "Regular", reportData.totRP, reportData.totRA], ["#d97706", "Irregular", reportData.totIP, reportData.totIA], ["#dc2626", "No", reportData.totNP, reportData.totNA]].map(([c, l, p, a]) =>
+        /*#__PURE__*/React.createElement("div", { key: l, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontSize: 12.5 } },
+          /*#__PURE__*/React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 6 } },
+            /*#__PURE__*/React.createElement("span", { style: { width: 9, height: 9, borderRadius: "50%", background: c, display: "inline-block", flexShrink: 0 } }),
+            l
+          ),
+          /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600, color: "#374151" } }, `${p}P / ${a}A`)
+        )
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { borderTop: "1px solid #eee", marginTop: 8, paddingTop: 8, display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 } },
+        /*#__PURE__*/React.createElement("span", null, "Grand Total"),
+        /*#__PURE__*/React.createElement("span", { style: { color: "#1e40af" } }, `${reportData.grandP}P / ${reportData.grandA}A \u2014 ${(reportData.grandP + reportData.grandA) > 0 ? Math.round(reportData.grandP / (reportData.grandP + reportData.grandA) * 100) : 0}%`)
+      )
     )
   ),
   /*#__PURE__*/React.createElement("div", { style: { overflowX: "auto" } },
